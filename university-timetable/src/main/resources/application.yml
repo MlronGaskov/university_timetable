@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/university_timetable
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+  jackson:
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false
+
+app:
+  jwt:
+    issuer: university-timetable
+    secretBase64: ${APP_JWT_SECRET_BASE64:GJl59XlEDGorbVv72YBN37f725bqhx8+GbSpCCjupEA=}
+    expiration: 86400
+
+logging:
+  level:
+    org.springframework.security: DEBUG
