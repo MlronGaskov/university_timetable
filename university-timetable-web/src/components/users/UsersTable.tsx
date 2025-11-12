@@ -2,10 +2,11 @@ import React from 'react';
 import {UserDto} from '@/types';
 import Button from '../ui/Button';
 
-export default function UsersTable({users, onEdit, onToggle}: {
+export default function UsersTable({users, onEdit, onToggle, onChangePassword}: {
     users: UserDto[];
     onEdit: (u: UserDto) => void;
     onToggle: (u: UserDto) => void;
+    onChangePassword: (u: UserDto) => void;
 }) {
     return (
         <div className="card" style={{overflow: 'auto'}}>
@@ -31,8 +32,9 @@ export default function UsersTable({users, onEdit, onToggle}: {
                         <td>{new Date(u.createdAt).toLocaleString()}</td>
                         <td>{new Date(u.updatedAt).toLocaleString()}</td>
                         <td style={{textAlign: 'center'}}>
-                            <div style={{display: 'flex', gap: 8, justifyContent: 'center'}}>
+                            <div style={{display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap'}}>
                                 <Button onClick={() => onEdit(u)}>Редактировать</Button>
+                                <Button onClick={() => onChangePassword(u)}>Сменить пароль</Button>
                                 <Button onClick={() => onToggle(u)} className={u.status === 'ACTIVE' ? 'warn' : 'ok'}>
                                     {u.status === 'ACTIVE' ? 'Деактивировать' : 'Активировать'}
                                 </Button>

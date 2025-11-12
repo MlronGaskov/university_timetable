@@ -3,9 +3,7 @@ package ru.nsu.university.timetable.web;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.nsu.university.timetable.dto.CreateUserRequest;
-import ru.nsu.university.timetable.dto.UpdateUserRequest;
-import ru.nsu.university.timetable.dto.UserResponse;
+import ru.nsu.university.timetable.dto.*;
 import ru.nsu.university.timetable.service.UserService;
 
 import java.util.List;
@@ -18,7 +16,7 @@ public class UserController {
     private final UserService service;
 
     @PostMapping
-    public UserResponse create(@RequestBody @Validated CreateUserRequest req) {
+    public CreateUserResult create(@RequestBody @Validated CreateUserRequest req) {
         return service.create(req);
     }
 
@@ -35,6 +33,11 @@ public class UserController {
     @PutMapping("/{id}")
     public UserResponse update(@PathVariable UUID id, @RequestBody @Validated UpdateUserRequest req) {
         return service.update(id, req);
+    }
+
+    @PostMapping("/{id}/password")
+    public UserResponse setPassword(@PathVariable UUID id, @RequestBody @Validated SetPasswordRequest req) {
+        return service.setPassword(id, req.newPassword());
     }
 
     @PostMapping("/{id}/deactivate")

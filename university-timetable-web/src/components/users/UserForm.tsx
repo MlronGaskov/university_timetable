@@ -96,7 +96,7 @@ export default function UserForm({initial, onSubmit, submitLabel}: {
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                             setForm({...form, password: e.currentTarget.value})
                         }
-                        placeholder="если пусто — дефолтный"
+                        placeholder="если пусто — пароль сгенерируется"
                     />
                 </div>
             )}

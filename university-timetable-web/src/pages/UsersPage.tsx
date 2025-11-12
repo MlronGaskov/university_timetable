@@ -6,14 +6,17 @@ import UserForm from '../components/users/UserForm';
 import {UserDto} from '@/types';
 import {UsersApi} from '@api/users';
 import {useAuth} from '@hooks/useAuth';
+import {useNavigate} from 'react-router-dom';
 
 export default function UsersPage() {
     const {logout} = useAuth();
+    const nav = useNavigate();
     const [users, setUsers] = useState<UserDto[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [showCreate, setShowCreate] = useState(false);
     const [editing, setEditing] = useState<UserDto | null>(null);
+    const [passwordInfo, setPasswordInfo] = useState<{ login: string; tempPassword: string } | null>(null);
 
     const load = async () => {
         setLoading(true);
@@ -37,7 +40,12 @@ export default function UsersPage() {
                 <div className="page-header-title">Пользователи</div>
                 <div style={{display: 'flex', gap: 8}}>
                     <Button onClick={() => setShowCreate(true)} className="primary">Создать</Button>
-                    <Button onClick={logout}>Выйти</Button>
+                    <Button onClick={() => {
+                        logout();
+                        nav('/login', {replace: true});
+                    }}>
+                        Выйти
+                    </Button>
                 </div>
             </header>
 
@@ -52,6 +60,17 @@ export default function UsersPage() {
                             u.status === 'ACTIVE' ? await UsersApi.deactivate(u.id) : await UsersApi.activate(u.id);
                             load();
                         }}
+                        onChangePassword={async (u) => {
+                            const np = prompt(`Новый пароль для ${u.login}:`, '');
+                            if (!np) return;
+                            try {
+                                await UsersApi.setPassword(u.id, np);
+                                alert('Пароль обновлён');
+                                load();
+                            } catch (e: any) {
+                                alert(e?.message ?? 'Ошибка смены пароля');
+                            }
+                        }}
                     />
                 )}
             </main>
@@ -61,13 +80,16 @@ export default function UsersPage() {
                     <UserForm
                         submitLabel="Создать"
                         onSubmit={async (f) => {
-                            await UsersApi.create({
+                            const res = await UsersApi.create({
                                 login: f.login,
                                 email: f.email,
                                 role: f.role,
-                                password: f.password || undefined
+                                password: f.password || undefined,
                             });
                             setShowCreate(false);
+                            if (res.tempPassword) {
+                                setPasswordInfo({login: res.user.login, tempPassword: res.tempPassword});
+                            }
                             load();
                         }}
                     />
@@ -85,6 +107,21 @@ export default function UsersPage() {
                             load();
                         }}
                     />
+                </Modal>
+            )}
+
+            {passwordInfo && (
+                <Modal title={`Временный пароль для ${passwordInfo.login}`} onClose={() => setPasswordInfo(null)}>
+                    <div className="row">
+                        <p>Сохраните этот пароль и передайте пользователю. Он показан только один раз:</p>
+                        <pre style={{userSelect: 'all', padding: 12, background: '#eee', borderRadius: 8}}>
+                            {passwordInfo.tempPassword}
+                        </pre>
+                        <Button onClick={() => {
+                            navigator.clipboard.writeText(passwordInfo.tempPassword);
+                            alert('Скопировано');
+                        }}>Скопировать</Button>
+                    </div>
                 </Modal>
             )}
         </div>

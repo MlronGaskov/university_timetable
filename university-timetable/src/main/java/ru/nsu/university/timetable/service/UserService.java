@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.domain.Status;
 import ru.nsu.university.timetable.domain.User;
 import ru.nsu.university.timetable.dto.CreateUserRequest;
+import ru.nsu.university.timetable.dto.CreateUserResult;
 import ru.nsu.university.timetable.dto.UpdateUserRequest;
 import ru.nsu.university.timetable.dto.UserResponse;
 import ru.nsu.university.timetable.repo.UserRepository;
@@ -21,10 +22,21 @@ public class UserService {
     private final UserRepository repo;
     private final PasswordEncoder encoder;
 
-    public UserResponse create(CreateUserRequest req) {
+    private static final String ABC = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
+    private String generatePassword(int len) {
+        var rnd = new java.security.SecureRandom();
+        var sb = new StringBuilder(len);
+        for (int i = 0; i < len; i++) sb.append(ABC.charAt(rnd.nextInt(ABC.length())));
+        return sb.toString();
+    }
+
+    public CreateUserResult create(CreateUserRequest req) {
         if (repo.existsByLogin(req.login())) throw new IllegalArgumentException("login already exists");
         if (repo.existsByEmail(req.email())) throw new IllegalArgumentException("email already exists");
-        String raw = req.password() == null || req.password().isBlank() ? "changeme" : req.password();
+
+        boolean generated = (req.password() == null || req.password().isBlank());
+        String raw = generated ? generatePassword(16) : req.password();
+
         User u = User.builder()
                 .login(req.login())
                 .email(req.email())
@@ -33,6 +45,14 @@ public class UserService {
                 .status(Status.ACTIVE)
                 .build();
         u = repo.save(u);
+
+        return new CreateUserResult(map(u), generated ? raw : null);
+    }
+
+    @Transactional
+    public UserResponse setPassword(UUID id, String rawPassword) {
+        User u = repo.findById(id).orElseThrow();
+        u.setPasswordHash(encoder.encode(rawPassword));
         return map(u);
     }
 
