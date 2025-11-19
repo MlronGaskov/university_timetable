@@ -6,10 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.domain.Status;
 import ru.nsu.university.timetable.domain.User;
-import ru.nsu.university.timetable.dto.CreateUserRequest;
-import ru.nsu.university.timetable.dto.CreateUserResult;
-import ru.nsu.university.timetable.dto.UpdateUserRequest;
-import ru.nsu.university.timetable.dto.UserResponse;
+import ru.nsu.university.timetable.dto.users.CreateUserRequest;
+import ru.nsu.university.timetable.dto.users.CreateUserResult;
+import ru.nsu.university.timetable.dto.users.UpdateUserRequest;
+import ru.nsu.university.timetable.dto.users.UserResponse;
 import ru.nsu.university.timetable.repo.UserRepository;
 
 import java.util.List;

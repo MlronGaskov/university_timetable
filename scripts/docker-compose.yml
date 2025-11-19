@@ -1,4 +1,5 @@
 version: "3.9"
+
 services:
   db:
     image: postgres:17-alpine
@@ -16,5 +17,53 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  backend:
+    build:
+      context: ../university-timetable
+      dockerfile: Dockerfile
+    container_name: university-timetable-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/university_timetable
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: ../university-timetable-web
+      dockerfile: Dockerfile
+    container_name: university-timetable-web
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:8080
+      NODE_ENV: development
+
+  init-root-user:
+    image: postgres:17-alpine
+    container_name: init-root-user
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      POSTGRES_DB: university_timetable
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ./db/schema.sql:/schema.sql:ro
+      - ./db/data.sql:/data.sql:ro
+      - ./db/init-root-user.sh:/init-root-user.sh:ro
+    entrypoint: ["/bin/sh", "/init-root-user.sh"]
+    restart: "no"
+
 volumes:
   pgdata:

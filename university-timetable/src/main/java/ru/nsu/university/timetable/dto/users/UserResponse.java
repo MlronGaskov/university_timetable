@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.dto;
+package ru.nsu.university.timetable.dto.users;
 
 import ru.nsu.university.timetable.domain.Role;
 import ru.nsu.university.timetable.domain.Status;

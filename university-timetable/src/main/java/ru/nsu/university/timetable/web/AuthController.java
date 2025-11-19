@@ -8,8 +8,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.nsu.university.timetable.dto.LoginRequest;
-import ru.nsu.university.timetable.dto.TokenResponse;
+import ru.nsu.university.timetable.dto.auth.LoginRequest;
+import ru.nsu.university.timetable.dto.auth.TokenResponse;
 import ru.nsu.university.timetable.service.JwtService;
 
 import java.util.Map;

@@ -3,7 +3,7 @@ package ru.nsu.university.timetable.web;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.nsu.university.timetable.dto.*;
+import ru.nsu.university.timetable.dto.users.*;
 import ru.nsu.university.timetable.service.UserService;
 
 import java.util.List;

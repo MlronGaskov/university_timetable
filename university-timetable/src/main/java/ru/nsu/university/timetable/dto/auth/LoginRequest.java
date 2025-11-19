@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.dto;
+package ru.nsu.university.timetable.dto.auth;
 
 import jakarta.validation.constraints.NotBlank;
 

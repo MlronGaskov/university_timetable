@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.dto;
+package ru.nsu.university.timetable.dto.users;
 
 import jakarta.validation.constraints.*;
 import ru.nsu.university.timetable.domain.Role;
