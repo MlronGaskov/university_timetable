@@ -3,14 +3,11 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import UsersTable from '../components/users/UsersTable';
 import UserForm from '../components/users/UserForm';
+import NavBar from '../components/NavBar';
 import {UserDto} from '@/types';
 import {UsersApi} from '@api/users';
-import {useAuth} from '@hooks/useAuth';
-import {useNavigate} from 'react-router-dom';
 
 export default function UsersPage() {
-    const {logout} = useAuth();
-    const nav = useNavigate();
     const [users, setUsers] = useState<UserDto[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -38,14 +35,9 @@ export default function UsersPage() {
         <div className="page">
             <header className="hdr">
                 <div className="page-header-title">Пользователи</div>
-                <div style={{display: 'flex', gap: 8}}>
+                <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+                    <NavBar/>
                     <Button onClick={() => setShowCreate(true)} className="primary">Создать</Button>
-                    <Button onClick={() => {
-                        logout();
-                        nav('/login', {replace: true});
-                    }}>
-                        Выйти
-                    </Button>
                 </div>
             </header>
 

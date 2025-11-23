@@ -22,3 +22,65 @@ export type TokenPayload = {
     exp: number;
     iat: number;
 };
+
+/* ---------- Groups / Subgroups ---------- */
+
+export type SubgroupDto = {
+    id: string;
+    name: string;
+    size: number;
+    status: Status;
+};
+
+export type GroupDto = {
+    id: string;
+    name: string;
+    code: string;
+    size: number;
+    status: Status;
+    createdAt: string;
+    updatedAt: string;
+    subgroups: SubgroupDto[];
+};
+
+/* ---------- Students ---------- */
+
+export type StudentDto = {
+    id: string;
+    fullName: string;
+    studentId: string;
+    groupId: string | null;
+    groupName: string | null;
+    status: Status;
+    createdAt: string;
+    updatedAt: string;
+};
+
+/* ---------- Teachers ---------- */
+
+export type TeacherDto = {
+    id: string;
+    fullName: string;
+    status: Status;
+    createdAt: string;
+    updatedAt: string;
+};
+
+/* ---------- Rooms ---------- */
+
+export type RoomEquipmentDto = {
+    id: string;
+    name: string;
+    quantity: number;
+};
+
+export type RoomDto = {
+    id: string;
+    building: string;
+    number: string;
+    capacity: number;
+    status: Status;
+    createdAt: string;
+    updatedAt: string;
+    equipment: RoomEquipmentDto[];
+};

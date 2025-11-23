@@ -23,7 +23,7 @@ public class JwtService {
             @Value("${app.jwt.issuer}") String issuer,
             @Value("${app.jwt.expiration}") long expirationSec) {
         byte[] keyBytes = Decoders.BASE64.decode(secretBase64);
-        this.key = Keys.hmacShaKeyFor(keyBytes); // гарантирует достаточную длину для HS256
+        this.key = Keys.hmacShaKeyFor(keyBytes);
         this.issuer = issuer;
         this.expirationSec = expirationSec;
     }
