@@ -6,7 +6,7 @@ import Input from '../components/ui/Input';
 import {RoomDto} from '@/types';
 import {RoomsApi, CreateRoomReq, UpdateRoomReq, RoomEquipmentItemReq} from '@api/rooms';
 import {useAuth} from '@hooks/useAuth';
-import NavBar from "@components/NavBar";
+import NavBar from '@components/NavBar';
 
 type RoomFormProps = {
     initial?: RoomDto;
@@ -14,35 +14,62 @@ type RoomFormProps = {
     submitLabel: string;
 };
 
+type EquipmentRow = { name: string; quantity: string };
+
 function RoomForm({initial, onSubmit, submitLabel}: RoomFormProps) {
     const isEdit = !!initial;
     const [building, setBuilding] = useState(initial?.building ?? '');
     const [number, setNumber] = useState(initial?.number ?? '');
     const [capacity, setCapacity] = useState(initial?.capacity?.toString() ?? '0');
-    const [equipmentName, setEquipmentName] = useState('');
-    const [equipmentQty, setEquipmentQty] = useState('1');
+
+    const [equipment, setEquipment] = useState<EquipmentRow[]>(() => {
+        if (initial?.equipment?.length) {
+            return initial.equipment.map(e => ({
+                name: e.name,
+                quantity: e.quantity.toString(),
+            }));
+        }
+        return [{name: '', quantity: '1'}];
+    });
+
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const handleEquipmentChange = (index: number, field: keyof EquipmentRow, value: string) => {
+        setEquipment(prev =>
+            prev.map((row, i) => (i === index ? {...row, [field]: value} : row))
+        );
+    };
+
+    const handleAddEquipmentRow = () => {
+        setEquipment(prev => [...prev, {name: '', quantity: '1'}]);
+    };
+
+    const handleRemoveEquipmentRow = (index: number) => {
+        setEquipment(prev => prev.filter((_, i) => i !== index));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
         setError(null);
         try {
-            const equip: RoomEquipmentItemReq[] = [];
-            if (equipmentName.trim()) {
-                equip.push({
-                    name: equipmentName.trim(),
-                    quantity: Number(equipmentQty) || 0,
-                });
-            }
+            const equip: RoomEquipmentItemReq[] = equipment
+                .map(row => ({
+                    name: row.name.trim(),
+                    quantity: Number(row.quantity) || 0,
+                }))
+                .filter(row => row.name);
 
             const body: any = {
                 building: building.trim(),
                 number: number.trim(),
                 capacity: Number(capacity) || 0,
             };
-            if (equip.length) body.equipment = equip;
+
+            if (equip.length) {
+                body.equipment = equip;
+            }
 
             await onSubmit(body);
         } catch (err: any) {
@@ -72,24 +99,56 @@ function RoomForm({initial, onSubmit, submitLabel}: RoomFormProps) {
                     min={0}
                 />
             </div>
+
             <div className="row">
-                <label className="label">Оборудование (простая форма)</label>
-                <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8}}>
-                    <Input
-                        placeholder="например, Проектор"
-                        value={equipmentName}
-                        onChange={e => setEquipmentName(e.currentTarget.value)}
-                    />
-                    <Input
-                        type="number"
-                        placeholder="Кол-во"
-                        value={equipmentQty}
-                        onChange={e => setEquipmentQty(e.currentTarget.value)}
-                        min={0}
-                    />
+                <label className="label">Оборудование</label>
+                <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
+                    {equipment.map((row, index) => (
+                        <div
+                            key={index}
+                            style={{
+                                display: 'grid',
+                                gridTemplateColumns: '2fr 1fr auto',
+                                gap: 8,
+                                alignItems: 'center',
+                            }}
+                        >
+                            <Input
+                                placeholder="например, Проектор"
+                                value={row.name}
+                                onChange={e =>
+                                    handleEquipmentChange(index, 'name', e.currentTarget.value)
+                                }
+                            />
+                            <Input
+                                type="number"
+                                placeholder="Кол-во"
+                                min={0}
+                                value={row.quantity}
+                                onChange={e =>
+                                    handleEquipmentChange(index, 'quantity', e.currentTarget.value)
+                                }
+                            />
+                            <Button
+                                type="button"
+                                className="warn"
+                                onClick={() => handleRemoveEquipmentRow(index)}
+                                disabled={equipment.length === 1}
+                            >
+                                Удалить
+                            </Button>
+                        </div>
+                    ))}
+
+                    <Button type="button" onClick={handleAddEquipmentRow}>
+                        + Добавить оборудование
+                    </Button>
+                    <p className="note">
+                        Можно указать несколько строк оборудования. Пустые строки игнорируются.
+                    </p>
                 </div>
-                <p className="note">Пока только одно оборудование за раз; можно редактировать позже.</p>
             </div>
+
             {error && <div className="error">{error}</div>}
             <div style={{display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 8}}>
                 <Button type="submit" className="primary" disabled={saving}>
