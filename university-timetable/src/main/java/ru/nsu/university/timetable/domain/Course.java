@@ -44,6 +44,7 @@ public class Course {
     @CollectionTable(name = "course_activity_forms", joinColumns = @JoinColumn(name = "course_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "activity_form", length = 16, nullable = false)
+    @Builder.Default
     private Set<ActivityForm> activityForms = EnumSet.noneOf(ActivityForm.class);
 
     @Column(name = "lecture_hours")
@@ -65,6 +66,10 @@ public class Course {
             inverseJoinColumns = @JoinColumn(name = "equipment_id")
     )
     private Set<RoomEquipment> equipmentRequirements;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "semester_id", nullable = false)
+    private Semester semester;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)

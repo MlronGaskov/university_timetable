@@ -38,6 +38,10 @@ public class Group {
     @Column(nullable = false, length = 16)
     private Status status;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "semester_id", nullable = false)
+    private Semester semester;
+
     @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<Subgroup> subgroups = new ArrayList<>();

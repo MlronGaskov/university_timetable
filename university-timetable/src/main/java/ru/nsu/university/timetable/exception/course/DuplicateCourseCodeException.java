@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.service;
+package ru.nsu.university.timetable.exception.course;
 
 public class DuplicateCourseCodeException extends RuntimeException {
     public DuplicateCourseCodeException(String code) {

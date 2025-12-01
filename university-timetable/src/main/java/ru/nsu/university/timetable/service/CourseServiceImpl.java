@@ -10,6 +10,9 @@ import ru.nsu.university.timetable.dto.courses.CourseDto;
 import ru.nsu.university.timetable.dto.courses.CourseListItemDto;
 import ru.nsu.university.timetable.dto.courses.CreateCourseRequest;
 import ru.nsu.university.timetable.dto.courses.UpdateCourseRequest;
+import ru.nsu.university.timetable.exception.course.CourseHoursConflictException;
+import ru.nsu.university.timetable.exception.course.CourseNotFoundException;
+import ru.nsu.university.timetable.exception.course.DuplicateCourseCodeException;
 import ru.nsu.university.timetable.repo.CourseRepository;
 import ru.nsu.university.timetable.repo.RoomEquipmentRepository;
 

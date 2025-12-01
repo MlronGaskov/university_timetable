@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.service;
+package ru.nsu.university.timetable.exception.course;
 
 public class CourseDeleteForbiddenException extends RuntimeException {
     public CourseDeleteForbiddenException(String message) {
