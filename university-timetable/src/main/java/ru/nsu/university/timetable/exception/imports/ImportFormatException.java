@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.importexport.parser;
+package ru.nsu.university.timetable.exception.imports;
 
 public class ImportFormatException extends RuntimeException {
     public ImportFormatException(String message) {

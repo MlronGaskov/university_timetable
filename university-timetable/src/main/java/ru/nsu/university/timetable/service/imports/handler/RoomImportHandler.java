@@ -1,38 +1,34 @@
-package ru.nsu.university.timetable.importexport.service.handler;
+package ru.nsu.university.timetable.service.imports.handler;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import ru.nsu.university.timetable.domain.Group;
+import ru.nsu.university.timetable.dto.imports.ImportPreviewDto;
+import ru.nsu.university.timetable.dto.imports.ImportResultDto;
+import ru.nsu.university.timetable.dto.imports.ImportRowStatusDto;
+import ru.nsu.university.timetable.repo.RoomRepository;
+import ru.nsu.university.timetable.domain.Room;
 import ru.nsu.university.timetable.domain.Status;
-import ru.nsu.university.timetable.domain.Student;
-import ru.nsu.university.timetable.importexport.dto.ImportPreviewDto;
-import ru.nsu.university.timetable.importexport.dto.ImportResultDto;
-import ru.nsu.university.timetable.importexport.dto.ImportRowStatusDto;
-import ru.nsu.university.timetable.repo.GroupRepository;
-import ru.nsu.university.timetable.repo.StudentRepository;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
-public class StudentImportHandler implements ImportHandler {
+public class RoomImportHandler implements ImportHandler {
 
-    private final StudentRepository studentRepository;
-    private final GroupRepository groupRepository;
+    private final RoomRepository roomRepository;
 
     private static final List<String> EXPECTED_HEADERS = List.of(
-            "full_name",
-            "student_id",
-            "group_code",
+            "building",
+            "number",
+            "capacity",
             "status"
     );
 
     @Override
     public String getType() {
-        return "students";
+        return "rooms";
     }
 
     @Override
@@ -51,25 +47,22 @@ public class StudentImportHandler implements ImportHandler {
             st.setRowNumber(rowNumber++);
 
             List<String> problems = validateRow(row);
-            List<String> warnings = new ArrayList<>();
 
-            String studentId = row.getOrDefault("student_id", "").trim();
-            if (!studentId.isEmpty() && studentRepository.existsByStudentId(studentId)) {
-                warnings.add("student_id уже существует — будет пропущен при импорте");
+            String building = row.getOrDefault("building", "").trim();
+            String number = row.getOrDefault("number", "").trim();
+            if (!building.isEmpty() && !number.isEmpty()
+                    && roomRepository.existsByBuildingAndNumber(building, number)) {
+                problems.add("Аудитория " + building + " " + number + " уже существует");
             }
 
             if (problems.isEmpty()) {
-                st.setValid(warnings.isEmpty());
-                st.setHasWarnings(!warnings.isEmpty());
-                String base = warnings.isEmpty() ? "OK" : "OK (но с предупреждениями)";
-                warnings.add(0, base);
-                st.setMessage(String.join("; ", warnings));
-                if (warnings.isEmpty()) valid++;
-                else invalid++;
+                st.setValid(true);
+                st.setHasWarnings(false);
+                st.setMessage("OK");
+                valid++;
             } else {
-                problems.addAll(warnings);
                 st.setValid(false);
-                st.setHasWarnings(!warnings.isEmpty());
+                st.setHasWarnings(false);
                 st.setMessage(String.join("; ", problems));
                 invalid++;
             }
@@ -103,9 +96,11 @@ public class StudentImportHandler implements ImportHandler {
 
             List<String> problems = validateRow(row);
 
-            String studentId = row.getOrDefault("student_id", "").trim();
-            if (!studentId.isEmpty() && studentRepository.existsByStudentId(studentId)) {
-                problems.add("student_id уже существует — строка пропущена");
+            String building = row.getOrDefault("building", "").trim();
+            String number = row.getOrDefault("number", "").trim();
+            if (!building.isEmpty() && !number.isEmpty()
+                    && roomRepository.existsByBuildingAndNumber(building, number)) {
+                problems.add("Аудитория " + building + " " + number + " уже существует — строка пропущена");
             }
 
             if (!problems.isEmpty()) {
@@ -114,27 +109,23 @@ public class StudentImportHandler implements ImportHandler {
                 st.setMessage(String.join("; ", problems));
                 skipped++;
             } else {
-                String fullName = row.get("full_name").trim();
-                String groupCode = row.get("group_code").trim();
+                String capacityStr = row.get("capacity").trim();
+                int capacity = Integer.parseInt(capacityStr);
                 String statusStr = row.getOrDefault("status", "").trim();
-
-                Optional<Group> groupOpt = groupRepository.findByCode(groupCode);
-                Group group = groupOpt.orElseThrow(); // validateRow уже проверил, что группа есть
-
                 Status status = parseStatusOrDefault(statusStr, Status.ACTIVE);
 
-                Student student = Student.builder()
-                        .fullName(fullName)
-                        .studentId(studentId)
-                        .group(group)
+                Room room = Room.builder()
+                        .building(building)
+                        .number(number)
+                        .capacity(capacity)
                         .status(status)
                         .build();
 
-                studentRepository.save(student);
+                roomRepository.save(room);
 
                 st.setValid(true);
                 st.setHasWarnings(false);
-                st.setMessage("Импортирован");
+                st.setMessage("Импортирована");
                 imported++;
             }
 
@@ -150,22 +141,22 @@ public class StudentImportHandler implements ImportHandler {
     private List<String> validateRow(Map<String, String> row) {
         List<String> problems = new ArrayList<>();
 
-        String fullName = row.getOrDefault("full_name", "").trim();
-        String studentId = row.getOrDefault("student_id", "").trim();
-        String groupCode = row.getOrDefault("group_code", "").trim();
+        String building = row.getOrDefault("building", "").trim();
+        String number = row.getOrDefault("number", "").trim();
+        String capacityStr = row.getOrDefault("capacity", "").trim();
         String statusStr = row.getOrDefault("status", "").trim();
 
-        if (fullName.isEmpty()) {
-            problems.add("full_name обязателен");
-        }
-        if (studentId.isEmpty()) {
-            problems.add("student_id обязателен");
-        }
-        if (groupCode.isEmpty()) {
-            problems.add("group_code обязателен");
+        if (building.isEmpty()) problems.add("building обязателен");
+        if (number.isEmpty()) problems.add("number обязателен");
+
+        if (capacityStr.isEmpty()) {
+            problems.add("capacity обязателен");
         } else {
-            if (groupRepository.findByCode(groupCode).isEmpty()) {
-                problems.add("Группа с code='" + groupCode + "' не найдена");
+            try {
+                int c = Integer.parseInt(capacityStr);
+                if (c < 0) problems.add("capacity не может быть отрицательным");
+            } catch (NumberFormatException e) {
+                problems.add("capacity должен быть целым числом");
             }
         }
 

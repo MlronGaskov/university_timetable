@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.importexport.parser;
+package ru.nsu.university.timetable.service.imports.parser;
 
 import org.springframework.web.multipart.MultipartFile;
 

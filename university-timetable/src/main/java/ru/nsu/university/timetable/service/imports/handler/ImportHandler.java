@@ -1,7 +1,7 @@
-package ru.nsu.university.timetable.importexport.service.handler;
+package ru.nsu.university.timetable.service.imports.handler;
 
-import ru.nsu.university.timetable.importexport.dto.ImportPreviewDto;
-import ru.nsu.university.timetable.importexport.dto.ImportResultDto;
+import ru.nsu.university.timetable.dto.imports.ImportPreviewDto;
+import ru.nsu.university.timetable.dto.imports.ImportResultDto;
 
 import java.util.List;
 import java.util.Map;

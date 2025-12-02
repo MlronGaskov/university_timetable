@@ -1,7 +1,8 @@
-package ru.nsu.university.timetable.importexport.parser;
+package ru.nsu.university.timetable.service.imports.parser;
 
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
+import ru.nsu.university.timetable.exception.imports.ImportFormatException;
 
 import java.util.List;
 import java.util.Map;

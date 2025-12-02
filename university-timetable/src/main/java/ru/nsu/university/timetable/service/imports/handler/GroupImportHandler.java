@@ -1,13 +1,13 @@
-package ru.nsu.university.timetable.importexport.service.handler;
+package ru.nsu.university.timetable.service.imports.handler;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import ru.nsu.university.timetable.dto.imports.ImportPreviewDto;
+import ru.nsu.university.timetable.dto.imports.ImportResultDto;
+import ru.nsu.university.timetable.dto.imports.ImportRowStatusDto;
+import ru.nsu.university.timetable.repo.GroupRepository;
 import ru.nsu.university.timetable.domain.Group;
 import ru.nsu.university.timetable.domain.Status;
-import ru.nsu.university.timetable.importexport.dto.ImportPreviewDto;
-import ru.nsu.university.timetable.importexport.dto.ImportResultDto;
-import ru.nsu.university.timetable.importexport.dto.ImportRowStatusDto;
-import ru.nsu.university.timetable.repo.GroupRepository;
 
 import java.util.ArrayList;
 import java.util.List;

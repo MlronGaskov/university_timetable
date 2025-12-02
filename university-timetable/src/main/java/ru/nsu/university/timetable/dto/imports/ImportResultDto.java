@@ -1,4 +1,4 @@
-package ru.nsu.university.timetable.importexport.dto;
+package ru.nsu.university.timetable.dto.imports;
 
 import lombok.Data;
 

@@ -1,13 +1,13 @@
-package ru.nsu.university.timetable.importexport.service;
+package ru.nsu.university.timetable.service.imports;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import ru.nsu.university.timetable.importexport.dto.ImportPreviewDto;
-import ru.nsu.university.timetable.importexport.dto.ImportResultDto;
-import ru.nsu.university.timetable.importexport.parser.ImportFormatException;
-import ru.nsu.university.timetable.importexport.parser.TabularFileParser;
-import ru.nsu.university.timetable.importexport.service.handler.ImportHandler;
+import ru.nsu.university.timetable.service.imports.handler.ImportHandler;
+import ru.nsu.university.timetable.service.imports.parser.TabularFileParser;
+import ru.nsu.university.timetable.dto.imports.ImportPreviewDto;
+import ru.nsu.university.timetable.dto.imports.ImportResultDto;
+import ru.nsu.university.timetable.exception.imports.ImportFormatException;
 
 import java.util.List;
 import java.util.Map;
