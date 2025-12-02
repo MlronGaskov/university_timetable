@@ -2,6 +2,7 @@ package ru.nsu.university.timetable.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -14,8 +15,6 @@ import ru.nsu.university.timetable.dto.policies.PolicySetDto;
 import ru.nsu.university.timetable.dto.policies.PolicySetSummaryDto;
 import ru.nsu.university.timetable.dto.policies.PolicySetUpdateRequest;
 import ru.nsu.university.timetable.service.PolicyService;
-
-import jakarta.validation.Valid;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -65,6 +64,12 @@ public class PolicyController {
         }
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','SCHEDULER')")
+    public PolicySetDto getById(@PathVariable("id") UUID id) {
+        return policyService.getById(id);
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN','SCHEDULER')")
     public PolicySetDto createPolicySet(@Valid @RequestBody PolicySetUpdateRequest request,
@@ -98,8 +103,7 @@ public class PolicyController {
         return policyService.previewImpact(id);
     }
 
-
-    private String toSimpleYaml(PolicySetDto dto) throws JsonProcessingException {
+    private String toSimpleYaml(PolicySetDto dto) {
         StringBuilder sb = new StringBuilder();
         sb.append("id: ").append(dto.getId()).append("\n");
         sb.append("version: ").append(dto.getVersion()).append("\n");
