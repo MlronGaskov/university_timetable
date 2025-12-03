@@ -20,6 +20,12 @@ public class RoomService {
     private final RoomRepository roomRepository;
 
     public RoomResponse create(CreateRoomRequest req) {
+        if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
+            throw new IllegalArgumentException(
+                    "Room with code '%s' already exists".formatted(req.roomCode())
+            );
+        }
+
         if (roomRepository.existsByBuildingIgnoreCaseAndNumberIgnoreCase(req.building(), req.number())) {
             throw new IllegalArgumentException(
                     "Room already exists in building '%s' with number '%s'"
@@ -28,6 +34,7 @@ public class RoomService {
         }
 
         Room room = Room.builder()
+                .roomCode(req.roomCode().trim())
                 .building(req.building())
                 .number(req.number())
                 .capacity(req.capacity())
@@ -56,6 +63,15 @@ public class RoomService {
     public RoomResponse update(UUID id, UpdateRoomRequest req) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + id));
+
+        if (req.roomCode() != null && !req.roomCode().equalsIgnoreCase(room.getRoomCode())) {
+            if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
+                throw new IllegalArgumentException(
+                        "Room with code '%s' already exists".formatted(req.roomCode())
+                );
+            }
+            room.setRoomCode(req.roomCode().trim());
+        }
 
         if (req.building() != null) {
             room.setBuilding(req.building());
@@ -110,6 +126,7 @@ public class RoomService {
 
         return new RoomResponse(
                 r.getId(),
+                r.getRoomCode(),
                 r.getBuilding(),
                 r.getNumber(),
                 r.getCapacity(),

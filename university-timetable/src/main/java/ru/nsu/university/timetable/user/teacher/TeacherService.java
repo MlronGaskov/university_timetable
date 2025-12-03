@@ -4,11 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.catalog.common.Status;
-import ru.nsu.university.timetable.user.teacher.dto.CreateTeacherRequest;
-import ru.nsu.university.timetable.user.teacher.dto.TeacherResponse;
-import ru.nsu.university.timetable.user.teacher.dto.UpdateTeacherRequest;
-import ru.nsu.university.timetable.user.teacher.dto.UpdateWorkingHoursRequest;
-import ru.nsu.university.timetable.user.teacher.dto.WorkingIntervalDto;
+import ru.nsu.university.timetable.user.teacher.dto.*;
 
 import java.time.DayOfWeek;
 import java.util.*;
@@ -24,8 +20,12 @@ public class TeacherService {
         if (repo.existsByFullNameIgnoreCase(req.fullName())) {
             throw new IllegalArgumentException("teacher already exists");
         }
+        if (repo.existsByTeacherId(req.teacherId())) {
+            throw new IllegalArgumentException("teacherId already exists");
+        }
 
         Teacher t = Teacher.builder()
+                .teacherId(req.teacherId().trim())
                 .fullName(req.fullName())
                 .status(Status.ACTIVE)
                 .build();
@@ -49,6 +49,13 @@ public class TeacherService {
 
     public TeacherResponse update(UUID id, UpdateTeacherRequest req) {
         Teacher t = repo.findById(id).orElseThrow();
+
+        if (req.teacherId() != null && !req.teacherId().equalsIgnoreCase(t.getTeacherId())) {
+            if (repo.existsByTeacherId(req.teacherId())) {
+                throw new IllegalArgumentException("teacherId already exists");
+            }
+            t.setTeacherId(req.teacherId().trim());
+        }
 
         if (req.fullName() != null && !req.fullName().equalsIgnoreCase(t.getFullName())) {
             if (repo.existsByFullNameIgnoreCase(req.fullName())) {
@@ -96,6 +103,7 @@ public class TeacherService {
 
         return new TeacherResponse(
                 t.getId(),
+                t.getTeacherId(),
                 t.getFullName(),
                 t.getStatus(),
                 hours,

@@ -4,6 +4,12 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record CreateTeacherRequest(
-        @NotBlank @Size(max = 128) String fullName
+        @NotBlank
+        @Size(max = 64)
+        String teacherId,
+
+        @NotBlank
+        @Size(max = 128)
+        String fullName
 ) {
 }

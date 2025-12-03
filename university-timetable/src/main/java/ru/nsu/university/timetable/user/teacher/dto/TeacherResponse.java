@@ -8,9 +8,11 @@ import java.util.UUID;
 
 public record TeacherResponse(
         UUID id,
+        String teacherId,
         String fullName,
         Status status,
         List<WorkingIntervalDto> preferredWorkingHours,
         Instant createdAt,
         Instant updatedAt
-) {}
+) {
+}

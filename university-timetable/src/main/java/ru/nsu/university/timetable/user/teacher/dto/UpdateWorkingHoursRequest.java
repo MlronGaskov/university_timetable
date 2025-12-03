@@ -6,4 +6,5 @@ import java.util.List;
 
 public record UpdateWorkingHoursRequest(
         @Valid List<WorkingIntervalDto> preferredWorkingHours
-) {}
+) {
+}

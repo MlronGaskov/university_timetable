@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record RoomResponse(
         UUID id,
+        String roomCode,
         String building,
         String number,
         int capacity,
@@ -15,4 +16,5 @@ public record RoomResponse(
         Instant createdAt,
         Instant updatedAt,
         List<RoomItemDto> items
-) {}
+) {
+}

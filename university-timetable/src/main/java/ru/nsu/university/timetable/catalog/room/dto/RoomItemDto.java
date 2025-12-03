@@ -11,4 +11,5 @@ public record RoomItemDto(
 
         @Min(0)
         int quantity
-) {}
+) {
+}

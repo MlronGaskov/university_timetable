@@ -6,6 +6,13 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 public record UpdateTeacherRequest(
-        @Size(max = 128) String fullName,
-        @Valid List<WorkingIntervalDto> preferredWorkingHours
-) {}
+        @Size(max = 64)
+        String teacherId,
+
+        @Size(max = 128)
+        String fullName,
+
+        @Valid
+        List<WorkingIntervalDto> preferredWorkingHours
+) {
+}

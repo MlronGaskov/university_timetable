@@ -20,16 +20,25 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "teachers",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_teachers_full_name",
-                columnNames = "full_name"
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_teachers_full_name",
+                        columnNames = "full_name"
+                ),
+                @UniqueConstraint(
+                        name = "uk_teachers_teacher_id",
+                        columnNames = "teacher_id"
+                )
+        }
 )
 @EntityListeners(AuditingEntityListener.class)
 public class Teacher {
     @Id
     @GeneratedValue
     private UUID id;
+
+    @Column(name = "teacher_id", nullable = false, length = 64)
+    private String teacherId;
 
     @Column(name = "full_name", nullable = false, length = 128)
     private String fullName;
@@ -41,7 +50,7 @@ public class Teacher {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
             name = "teacher_working_hours",
-            joinColumns = @JoinColumn(name = "teacher_id")
+            joinColumns = @JoinColumn(name = "teacher_id_fk")
     )
     @Builder.Default
     private Set<TeacherWorkingHours> preferredWorkingHours = new HashSet<>();

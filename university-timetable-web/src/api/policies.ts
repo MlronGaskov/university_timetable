@@ -1,40 +1,38 @@
 import {http} from './http';
-import type {
-    PolicyResponse,
-    CreatePolicyRequest,
-    UpdatePolicyRequest,
-} from '@/types/policy';
+import type {CreatePolicyRequest, PolicyResponse, UpdatePolicyRequest,} from '@/types/policies';
 import type {UUID} from '@/types/common';
+
+const BASE_PATH = '/api/policies';
 
 export const policiesApi = {
     getAll() {
-        return http<PolicyResponse[]>('/api/policies');
+        return http<PolicyResponse[]>(BASE_PATH);
     },
 
-    getOne(id: UUID) {
-        return http<PolicyResponse>(`/api/policies/${id}`);
+    getById(id: UUID) {
+        return http<PolicyResponse>(`${BASE_PATH}/${id}`);
     },
 
     getByName(name: string) {
-        return http<PolicyResponse>(`/api/policies/by-name/${encodeURIComponent(name)}`);
+        return http<PolicyResponse>(`${BASE_PATH}/by-name/${encodeURIComponent(name)}`);
     },
 
     create(body: CreatePolicyRequest) {
-        return http<PolicyResponse>('/api/policies', {
+        return http<PolicyResponse>(BASE_PATH, {
             method: 'POST',
             body: JSON.stringify(body),
         });
     },
 
     update(id: UUID, body: UpdatePolicyRequest) {
-        return http<PolicyResponse>(`/api/policies/${id}`, {
+        return http<PolicyResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
         });
     },
 
     delete(id: UUID) {
-        return http<void>(`/api/policies/${id}`, {
+        return http<void>(`${BASE_PATH}/${id}`, {
             method: 'DELETE',
         });
     },

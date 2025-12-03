@@ -7,6 +7,9 @@ import java.util.List;
 
 public record UpdateRoomRequest(
         @Size(max = 64)
+        String roomCode,
+
+        @Size(max = 64)
         String building,
 
         @Size(max = 64)
@@ -16,4 +19,5 @@ public record UpdateRoomRequest(
         Integer capacity,
 
         List<RoomItemDto> items
-) {}
+) {
+}

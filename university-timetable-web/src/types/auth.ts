@@ -1,4 +1,4 @@
-import type {UUID, Instant, Status} from './common';
+import type {Status, UUID} from './common';
 
 export type Role = 'ADMIN' | 'TEACHER' | 'STUDENT';
 
@@ -17,12 +17,12 @@ export interface UserResponse {
     email: string;
     status: Status;
     role: Role;
-    teacherId: UUID | null;
+    teacherId: string | null;
     teacherName: string | null;
-    studentId: UUID | null;
+    studentId: string | null;
     studentName: string | null;
-    createdAt: Instant;
-    updatedAt: Instant;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface CreateUserRequest {
@@ -30,16 +30,16 @@ export interface CreateUserRequest {
     email: string;
     role: Role;
     password?: string | null;
-    teacherId?: UUID | null;
-    studentId?: UUID | null;
+    teacherId?: string | null;
+    studentId?: string | null;
 }
 
 export interface UpdateUserRequest {
     email?: string;
     role?: Role;
     status?: Status;
-    teacherId?: UUID | null;
-    studentId?: UUID | null;
+    teacherId?: string | null;
+    studentId?: string | null;
 }
 
 export interface SetPasswordRequest {

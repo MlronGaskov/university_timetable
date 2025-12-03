@@ -20,16 +20,25 @@ import java.util.UUID;
 @Entity
 @Table(
         name = "rooms",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_rooms_building_number",
-                columnNames = {"building", "number"}
-        )
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_rooms_building_number",
+                        columnNames = {"building", "number"}
+                ),
+                @UniqueConstraint(
+                        name = "uk_rooms_code",
+                        columnNames = "code"
+                )
+        }
 )
 @EntityListeners(AuditingEntityListener.class)
 public class Room {
     @Id
     @GeneratedValue
     private UUID id;
+
+    @Column(name = "code", nullable = false, length = 64)
+    private String roomCode;
 
     @Column(nullable = false, length = 64)
     private String building;

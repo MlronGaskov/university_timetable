@@ -9,6 +9,10 @@ import java.util.List;
 public record CreateRoomRequest(
         @NotBlank
         @Size(max = 64)
+        String roomCode,
+
+        @NotBlank
+        @Size(max = 64)
         String building,
 
         @NotBlank
@@ -19,4 +23,5 @@ public record CreateRoomRequest(
         int capacity,
 
         List<RoomItemDto> items
-) {}
+) {
+}

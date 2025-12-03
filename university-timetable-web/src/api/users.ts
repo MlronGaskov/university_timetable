@@ -2,50 +2,52 @@ import {http} from './http';
 import type {
     CreateUserRequest,
     CreateUserResult,
-    UpdateUserRequest,
     SetPasswordRequest,
+    UpdateUserRequest,
     UserResponse,
 } from '@/types/auth';
 import type {UUID} from '@/types/common';
 
+const BASE_PATH = '/api/users';
+
 export const usersApi = {
     create(body: CreateUserRequest) {
-        return http<CreateUserResult>('/api/users', {
+        return http<CreateUserResult>(BASE_PATH, {
             method: 'POST',
             body: JSON.stringify(body),
         });
     },
 
     getAll() {
-        return http<UserResponse[]>('/api/users');
+        return http<UserResponse[]>(BASE_PATH);
     },
 
-    getOne(id: UUID) {
-        return http<UserResponse>(`/api/users/${id}`);
+    getById(id: UUID) {
+        return http<UserResponse>(`${BASE_PATH}/${id}`);
     },
 
     update(id: UUID, body: UpdateUserRequest) {
-        return http<UserResponse>(`/api/users/${id}`, {
+        return http<UserResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
         });
     },
 
     setPassword(id: UUID, body: SetPasswordRequest) {
-        return http<UserResponse>(`/api/users/${id}/password`, {
+        return http<UserResponse>(`${BASE_PATH}/${id}/password`, {
             method: 'POST',
             body: JSON.stringify(body),
         });
     },
 
     deactivate(id: UUID) {
-        return http<UserResponse>(`/api/users/${id}/deactivate`, {
+        return http<UserResponse>(`${BASE_PATH}/${id}/deactivate`, {
             method: 'POST',
         });
     },
 
     activate(id: UUID) {
-        return http<UserResponse>(`/api/users/${id}/activate`, {
+        return http<UserResponse>(`${BASE_PATH}/${id}/activate`, {
             method: 'POST',
         });
     },

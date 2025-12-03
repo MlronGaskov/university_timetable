@@ -5,14 +5,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.catalog.common.Status;
-import ru.nsu.university.timetable.user.student.Student;
-import ru.nsu.university.timetable.user.student.StudentRepository;
-import ru.nsu.university.timetable.user.teacher.Teacher;
-import ru.nsu.university.timetable.user.teacher.TeacherRepository;
 import ru.nsu.university.timetable.user.auth.dto.CreateUserRequest;
 import ru.nsu.university.timetable.user.auth.dto.CreateUserResult;
 import ru.nsu.university.timetable.user.auth.dto.UpdateUserRequest;
 import ru.nsu.university.timetable.user.auth.dto.UserResponse;
+import ru.nsu.university.timetable.user.student.Student;
+import ru.nsu.university.timetable.user.student.StudentRepository;
+import ru.nsu.university.timetable.user.teacher.Teacher;
+import ru.nsu.university.timetable.user.teacher.TeacherRepository;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,12 +21,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional
 public class UserService {
+    private static final String ABC = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
     private final UserRepository repo;
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
     private final PasswordEncoder encoder;
-
-    private static final String ABC = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*";
 
     private String generatePassword(int len) {
         var rnd = new java.security.SecureRandom();
@@ -91,13 +90,13 @@ public class UserService {
 
         Role targetRole = req.role() != null ? req.role() : u.getRole();
 
-        UUID teacherId = req.teacherId() != null
+        String teacherId = req.teacherId() != null
                 ? req.teacherId()
-                : (u.getTeacher() != null ? u.getTeacher().getId() : null);
+                : (u.getTeacher() != null ? u.getTeacher().getTeacherId() : null);
 
-        UUID studentId = req.studentId() != null
+        String studentId = req.studentId() != null
                 ? req.studentId()
-                : (u.getStudent() != null ? u.getStudent().getId() : null);
+                : (u.getStudent() != null ? u.getStudent().getStudentId() : null);
 
         applyRoleBindings(u, targetRole, teacherId, studentId);
 
@@ -120,7 +119,7 @@ public class UserService {
         return map(u);
     }
 
-    private void applyRoleBindings(User user, Role role, UUID teacherId, UUID studentId) {
+    private void applyRoleBindings(User user, Role role, String teacherId, String studentId) {
         if (role == null) {
             throw new IllegalArgumentException("role must not be null");
         }
@@ -139,38 +138,40 @@ public class UserService {
         }
     }
 
-    private void configureTeacherRole(User user, UUID teacherId) {
-        if (teacherId == null) {
+    private void configureTeacherRole(User user, String teacherId) {
+        if (teacherId == null || teacherId.isBlank()) {
             throw new IllegalArgumentException("teacherId is required for TEACHER role");
         }
+        String normalized = teacherId.trim();
 
-        repo.findByTeacher_Id(teacherId)
+        repo.findByTeacher_TeacherId(normalized)
                 .filter(existing -> !existing.getId().equals(user.getId()))
                 .ifPresent(existing -> {
                     throw new IllegalArgumentException("Teacher is already linked to another user");
                 });
 
-        Teacher teacher = teacherRepository.findById(teacherId)
-                .orElseThrow(() -> new IllegalArgumentException("Teacher not found: " + teacherId));
+        Teacher teacher = teacherRepository.findByTeacherId(normalized)
+                .orElseThrow(() -> new IllegalArgumentException("Teacher not found: " + normalized));
 
         user.setRole(Role.TEACHER);
         user.setTeacher(teacher);
         user.setStudent(null);
     }
 
-    private void configureStudentRole(User user, UUID studentId) {
-        if (studentId == null) {
+    private void configureStudentRole(User user, String studentId) {
+        if (studentId == null || studentId.isBlank()) {
             throw new IllegalArgumentException("studentId is required for STUDENT role");
         }
+        String normalized = studentId.trim();
 
-        repo.findByStudent_Id(studentId)
+        repo.findByStudent_StudentId(normalized)
                 .filter(existing -> !existing.getId().equals(user.getId()))
                 .ifPresent(existing -> {
                     throw new IllegalArgumentException("Student is already linked to another user");
                 });
 
-        Student student = studentRepository.findById(studentId)
-                .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+        Student student = studentRepository.findByStudentId(normalized)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found: " + normalized));
 
         user.setRole(Role.STUDENT);
         user.setStudent(student);
@@ -178,17 +179,17 @@ public class UserService {
     }
 
     private UserResponse map(User u) {
-        UUID teacherId = null;
+        String teacherId = null;
         String teacherName = null;
         if (u.getTeacher() != null) {
-            teacherId = u.getTeacher().getId();
+            teacherId = u.getTeacher().getTeacherId();
             teacherName = u.getTeacher().getFullName();
         }
 
-        UUID studentId = null;
+        String studentId = null;
         String studentName = null;
         if (u.getStudent() != null) {
-            studentId = u.getStudent().getId();
+            studentId = u.getStudent().getStudentId();
             studentName = u.getStudent().getFullName();
         }
 

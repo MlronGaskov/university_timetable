@@ -1,42 +1,40 @@
 import {http} from './http';
-import type {
-    StudentResponse,
-    CreateStudentRequest,
-    UpdateStudentRequest,
-} from '@/types/student';
+import type {CreateStudentRequest, StudentResponse, UpdateStudentRequest,} from '@/types/students';
 import type {UUID} from '@/types/common';
+
+const BASE_PATH = '/api/students';
 
 export const studentsApi = {
     getAll() {
-        return http<StudentResponse[]>('/api/students');
+        return http<StudentResponse[]>(BASE_PATH);
     },
 
-    getOne(id: UUID) {
-        return http<StudentResponse>(`/api/students/${id}`);
+    getById(id: UUID) {
+        return http<StudentResponse>(`${BASE_PATH}/${id}`);
     },
 
     create(body: CreateStudentRequest) {
-        return http<StudentResponse>('/api/students', {
+        return http<StudentResponse>(BASE_PATH, {
             method: 'POST',
             body: JSON.stringify(body),
         });
     },
 
     update(id: UUID, body: UpdateStudentRequest) {
-        return http<StudentResponse>(`/api/students/${id}`, {
+        return http<StudentResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
         });
     },
 
     archive(id: UUID) {
-        return http<StudentResponse>(`/api/students/${id}/archive`, {
+        return http<StudentResponse>(`${BASE_PATH}/${id}/archive`, {
             method: 'POST',
         });
     },
 
     activate(id: UUID) {
-        return http<StudentResponse>(`/api/students/${id}/activate`, {
+        return http<StudentResponse>(`${BASE_PATH}/${id}/activate`, {
             method: 'POST',
         });
     },

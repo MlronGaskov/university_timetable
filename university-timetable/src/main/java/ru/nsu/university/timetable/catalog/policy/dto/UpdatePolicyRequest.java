@@ -11,4 +11,5 @@ public record UpdatePolicyRequest(
         String limitsJson,
         String travelMatrixJson,
         String weightsJson
-) {}
+) {
+}

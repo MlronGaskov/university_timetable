@@ -5,8 +5,6 @@ import jakarta.validation.constraints.Size;
 import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.user.auth.Role;
 
-import java.util.UUID;
-
 public record UpdateUserRequest(
         @Email
         @Size(max = 128)
@@ -16,7 +14,10 @@ public record UpdateUserRequest(
 
         Status status,
 
-        UUID teacherId,
-        UUID studentId
+        @Size(max = 64)
+        String teacherId,
+
+        @Size(max = 64)
+        String studentId
 ) {
 }

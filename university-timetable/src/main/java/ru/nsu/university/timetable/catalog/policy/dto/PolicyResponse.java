@@ -13,4 +13,5 @@ public record PolicyResponse(
         String weightsJson,
         Instant createdAt,
         Instant updatedAt
-) {}
+) {
+}

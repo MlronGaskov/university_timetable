@@ -22,4 +22,5 @@ public record CreatePolicyRequest(
 
         @NotBlank
         String weightsJson
-) {}
+) {
+}
