@@ -1,21 +1,52 @@
-import {UserDto, Role, Status, CreateUserResult} from '@/types';
-import {api} from './client';
+import {http} from './http';
+import type {
+    CreateUserRequest,
+    CreateUserResult,
+    UpdateUserRequest,
+    SetPasswordRequest,
+    UserResponse,
+} from '@/types/auth';
+import type {UUID} from '@/types/common';
 
-export type CreateUserReq = { login: string; email: string; role: Role; password?: string };
-export type UpdateUserReq = { email?: string; role?: Role; status?: Status };
+export const usersApi = {
+    create(body: CreateUserRequest) {
+        return http<CreateUserResult>('/api/users', {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    },
 
-export const UsersApi = {
-    list: () => api<UserDto[]>('/api/users'),
-    create: (body: CreateUserReq) => api<CreateUserResult>('/api/users', {method: 'POST', body: JSON.stringify(body)}),
-    get: (id: string) => api<UserDto>(`/api/users/${id}`),
-    update: (id: string, body: UpdateUserReq) => api<UserDto>(`/api/users/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(body)
-    }),
-    activate: (id: string) => api<UserDto>(`/api/users/${id}/activate`, {method: 'POST'}),
-    deactivate: (id: string) => api<UserDto>(`/api/users/${id}/deactivate`, {method: 'POST'}),
-    setPassword: (id: string, newPassword: string) => api<UserDto>(`/api/users/${id}/password`, {
-        method: 'POST',
-        body: JSON.stringify({newPassword})
-    }),
+    getAll() {
+        return http<UserResponse[]>('/api/users');
+    },
+
+    getOne(id: UUID) {
+        return http<UserResponse>(`/api/users/${id}`);
+    },
+
+    update(id: UUID, body: UpdateUserRequest) {
+        return http<UserResponse>(`/api/users/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+        });
+    },
+
+    setPassword(id: UUID, body: SetPasswordRequest) {
+        return http<UserResponse>(`/api/users/${id}/password`, {
+            method: 'POST',
+            body: JSON.stringify(body),
+        });
+    },
+
+    deactivate(id: UUID) {
+        return http<UserResponse>(`/api/users/${id}/deactivate`, {
+            method: 'POST',
+        });
+    },
+
+    activate(id: UUID) {
+        return http<UserResponse>(`/api/users/${id}/activate`, {
+            method: 'POST',
+        });
+    },
 };

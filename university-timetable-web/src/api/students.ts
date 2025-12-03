@@ -1,34 +1,43 @@
-import {StudentDto} from '@/types';
-import {api} from './client';
+import {http} from './http';
+import type {
+    StudentResponse,
+    CreateStudentRequest,
+    UpdateStudentRequest,
+} from '@/types/student';
+import type {UUID} from '@/types/common';
 
-export type CreateStudentReq = {
-    fullName: string;
-    studentId: string;
-    groupId?: string | null;
-};
+export const studentsApi = {
+    getAll() {
+        return http<StudentResponse[]>('/api/students');
+    },
 
-export type UpdateStudentReq = {
-    fullName?: string;
-    studentId?: string;
-    groupId?: string | null;
-};
+    getOne(id: UUID) {
+        return http<StudentResponse>(`/api/students/${id}`);
+    },
 
-export const StudentsApi = {
-    list: () => api<StudentDto[]>('/api/students'),
-    get: (id: string) => api<StudentDto>(`/api/students/${id}`),
-
-    create: (body: CreateStudentReq) =>
-        api<StudentDto>('/api/students', {
+    create(body: CreateStudentRequest) {
+        return http<StudentResponse>('/api/students', {
             method: 'POST',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    update: (id: string, body: UpdateStudentReq) =>
-        api<StudentDto>(`/api/students/${id}`, {
+    update(id: UUID, body: UpdateStudentRequest) {
+        return http<StudentResponse>(`/api/students/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    archive: (id: string) =>
-        api<StudentDto>(`/api/students/${id}/archive`, {method: 'POST'}),
+    archive(id: UUID) {
+        return http<StudentResponse>(`/api/students/${id}/archive`, {
+            method: 'POST',
+        });
+    },
+
+    activate(id: UUID) {
+        return http<StudentResponse>(`/api/students/${id}/activate`, {
+            method: 'POST',
+        });
+    },
 };

@@ -1,0 +1,19 @@
+.FormErrorAlert {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background-color: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    font-size: 13px;
+}
+
+.FormErrorAlert-main {
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.FormErrorAlert-list {
+    margin: 0;
+    padding-left: 16px;
+}

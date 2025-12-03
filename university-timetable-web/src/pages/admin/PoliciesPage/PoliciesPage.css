@@ -1,0 +1,39 @@
+@import '../TeachersPage/TeachersPage.css';
+
+.Policies-modalCard {
+    max-width: 900px;
+}
+
+.Policies-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.Policies-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+    color: #374151;
+}
+
+.Policies-field span {
+    font-weight: 500;
+}
+
+.Policies-field textarea {
+    resize: vertical;
+    border-radius: 8px;
+    border: 1px solid #cbd5f5;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+}
+
+.Policies-json-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}

@@ -1,38 +1,43 @@
-import {RoomDto} from '@/types';
-import {api} from './client';
+import {http} from './http';
+import type {
+    RoomResponse,
+    CreateRoomRequest,
+    UpdateRoomRequest,
+} from '@/types/room';
+import type {UUID} from '@/types/common';
 
-export type RoomEquipmentItemReq = { name: string; quantity: number };
+export const roomsApi = {
+    getAll() {
+        return http<RoomResponse[]>('/api/rooms');
+    },
 
-export type CreateRoomReq = {
-    building: string;
-    number: string;
-    capacity: number;
-    equipment?: RoomEquipmentItemReq[];
-};
+    getOne(id: UUID) {
+        return http<RoomResponse>(`/api/rooms/${id}`);
+    },
 
-export type UpdateRoomReq = {
-    building?: string;
-    number?: string;
-    capacity?: number;
-    equipment?: RoomEquipmentItemReq[];
-};
-
-export const RoomsApi = {
-    list: () => api<RoomDto[]>('/api/rooms'),
-    get: (id: string) => api<RoomDto>(`/api/rooms/${id}`),
-
-    create: (body: CreateRoomReq) =>
-        api<RoomDto>('/api/rooms', {
+    create(body: CreateRoomRequest) {
+        return http<RoomResponse>('/api/rooms', {
             method: 'POST',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    update: (id: string, body: UpdateRoomReq) =>
-        api<RoomDto>(`/api/rooms/${id}`, {
+    update(id: UUID, body: UpdateRoomRequest) {
+        return http<RoomResponse>(`/api/rooms/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    archive: (id: string) =>
-        api<RoomDto>(`/api/rooms/${id}/archive`, {method: 'POST'}),
+    archive(id: UUID) {
+        return http<RoomResponse>(`/api/rooms/${id}/archive`, {
+            method: 'POST',
+        });
+    },
+
+    activate(id: UUID) {
+        return http<RoomResponse>(`/api/rooms/${id}/activate`, {
+            method: 'POST',
+        });
+    },
 };

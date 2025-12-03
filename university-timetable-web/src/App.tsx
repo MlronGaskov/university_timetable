@@ -1,79 +1,126 @@
-import React from 'react';
-import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import UsersPage from './pages/UsersPage';
-import LoginPage from './pages/LoginPage';
-import RoomsPage from './pages/RoomsPage';
-import StudentsPage from './pages/StudentsPage';
-import {useAuth} from '@hooks/useAuth';
-import TeachersPage from './pages/TeachersPage';
-import GroupsPage from './pages/GroupsPage';
+import React from "react";
+import {Routes, Route, Navigate, useLocation} from "react-router-dom";
+import {useAuth} from '@/hooks/useAuth';
+import {Layout} from "@components/layout/Layout";
+import {LoginPage} from "@pages/LoginPage/LoginPage";
+import {MainPage} from "@pages/MainPage/MainPage";
+import {TimetablePage} from "@pages/TimetablePage/TimetablePage";
+import {ProfilePage} from "@pages/ProfilePage/ProfilePage";
 
-function RequireAuth({children}: { children: React.ReactElement }) {
-    const {isAuthed} = useAuth();
-    if (!isAuthed) return <Navigate to="/login" replace/>;
+import {UsersPage} from "@pages/admin/UsersPage/UsersPage";
+import {TeachersPage} from "@pages/admin/TeachersPage/TeachersPage";
+import {StudentsPage} from "@pages/admin/StudentsPage/StudentsPage";
+import {GroupsPage} from "@pages/admin/GroupsPage/GroupsPage";
+import {RoomsPage} from "@pages/admin/RoomsPage/RoomsPage";
+import {PoliciesPage} from "@pages/admin/PoliciesPage/PoliciesPage";
+
+import {TeachersCatalogPage} from "@pages/catalog/TeachersCatalogPage/TeachersCatalogPage";
+import {StudentsCatalogPage} from "@pages/catalog/StudentsCatalogPage/StudentsCatalogPage";
+import {GroupsCatalogPage} from "@pages/catalog/GroupsCatalogPage/GroupsCatalogPage";
+import {RoomsCatalogPage} from "@pages/catalog/RoomsCatalogPage/RoomsCatalogPage";
+
+const RequireAuth: React.FC<{ children: React.ReactElement }> = ({children}) => {
+    const {isAuthenticated} = useAuth();
+    const location = useLocation();
+
+    if (!isAuthenticated) {
+        return <Navigate to="/login" state={{from: location}} replace/>;
+    }
+
     return children;
-}
+};
 
-function RequireAdmin({children}: { children: React.ReactElement }) {
-    const {isAuthed, isAdmin} = useAuth();
-    if (!isAuthed) return <Navigate to="/login" replace/>;
-    if (!isAdmin) return <Navigate to="/" replace/>;
+const RequireAdmin: React.FC<{ children: React.ReactElement }> = ({children}) => {
+    const {role} = useAuth();
+
+    if (role !== 'ADMIN') {
+        return <Navigate to="/" replace/>;
+    }
+
     return children;
-}
+};
 
-export default function App() {
+export const App: React.FC = () => {
+    const {isAuthenticated} = useAuth();
+
     return (
-        <BrowserRouter>
-            <Routes>
-                <Route path="/" element={<HomePage/>}/>
+        <Routes>
+            <Route
+                path="/login"
+                element={isAuthenticated ? <Navigate to="/" replace/> : <LoginPage/>}
+            />
+
+            <Route
+                path="/"
+                element={
+                    <RequireAuth>
+                        <Layout/>
+                    </RequireAuth>
+                }
+            >
+                <Route index element={<MainPage/>}/>
+                <Route path="timetable" element={<TimetablePage/>}/>
+                <Route path="profile" element={<ProfilePage/>}/>
+
+                <Route path="teachers" element={<TeachersCatalogPage/>}/>
+                <Route path="students" element={<StudentsCatalogPage/>}/>
+                <Route path="groups" element={<GroupsCatalogPage/>}/>
+                <Route path="rooms" element={<RoomsCatalogPage/>}/>
 
                 <Route
-                    path="/users"
+                    path="admin/users"
                     element={
                         <RequireAdmin>
                             <UsersPage/>
                         </RequireAdmin>
                     }
                 />
-
                 <Route
-                    path="/rooms"
+                    path="admin/teachers"
                     element={
-                        <RequireAuth>
-                            <RoomsPage/>
-                        </RequireAuth>
-                    }
-                />
-
-                <Route
-                    path="/students"
-                    element={
-                        <RequireAuth>
-                            <StudentsPage/>
-                        </RequireAuth>
-                    }
-                />
-                <Route
-                    path="/groups"
-                    element={
-                        <RequireAuth>
-                            <GroupsPage/>
-                        </RequireAuth>
-                    }
-                />
-                <Route
-                    path="/teachers"
-                    element={
-                        <RequireAuth>
+                        <RequireAdmin>
                             <TeachersPage/>
-                        </RequireAuth>
+                        </RequireAdmin>
                     }
                 />
+                <Route
+                    path="admin/students"
+                    element={
+                        <RequireAdmin>
+                            <StudentsPage/>
+                        </RequireAdmin>
+                    }
+                />
+                <Route
+                    path="admin/groups"
+                    element={
+                        <RequireAdmin>
+                            <GroupsPage/>
+                        </RequireAdmin>
+                    }
+                />
+                <Route
+                    path="admin/rooms"
+                    element={
+                        <RequireAdmin>
+                            <RoomsPage/>
+                        </RequireAdmin>
+                    }
+                />
+                <Route
+                    path="admin/policies"
+                    element={
+                        <RequireAdmin>
+                            <PoliciesPage/>
+                        </RequireAdmin>
+                    }
+                />
+            </Route>
 
-                <Route path="/login" element={<LoginPage/>}/>
-                <Route path="*" element={<Navigate to="/" replace/>}/>
-            </Routes>
-        </BrowserRouter>
+            <Route
+                path="*"
+                element={<Navigate to={isAuthenticated ? "/" : "/login"} replace/>}
+            />
+        </Routes>
     );
-}
+};

@@ -1,43 +1,55 @@
-import {GroupDto, SubgroupDto} from '@/types';
-import {api} from './client';
+import {http} from './http';
+import type {
+    GroupResponse,
+    CreateGroupRequest,
+    UpdateGroupRequest,
+} from '@/types/group';
+import type {UUID} from '@/types/common';
 
-export type CreateGroupReq = { name: string; code: string; size: number };
-export type UpdateGroupReq = { name?: string; code?: string; size?: number };
+export const groupsApi = {
+    getAll() {
+        return http<GroupResponse[]>('/api/groups');
+    },
 
-export type CreateSubgroupReq = { name: string; size: number };
-export type UpdateSubgroupReq = { name?: string; size?: number };
+    getOne(id: UUID) {
+        return http<GroupResponse>(`/api/groups/${id}`);
+    },
 
-export const GroupsApi = {
-    list: () => api<GroupDto[]>('/api/groups'),
-    get: (id: string) => api<GroupDto>(`/api/groups/${id}`),
-
-    create: (body: CreateGroupReq) =>
-        api<GroupDto>('/api/groups', {
+    create(body: CreateGroupRequest) {
+        return http<GroupResponse>('/api/groups', {
             method: 'POST',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    update: (id: string, body: UpdateGroupReq) =>
-        api<GroupDto>(`/api/groups/${id}`, {
+    update(id: UUID, body: UpdateGroupRequest) {
+        return http<GroupResponse>(`/api/groups/${id}`, {
             method: 'PUT',
             body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    archive: (id: string) =>
-        api<GroupDto>(`/api/groups/${id}/archive`, {method: 'POST'}),
-
-    createSubgroup: (groupId: string, body: CreateSubgroupReq) =>
-        api<SubgroupDto>(`/api/groups/${groupId}/subgroups`, {
+    archive(id: UUID) {
+        return http<GroupResponse>(`/api/groups/${id}/archive`, {
             method: 'POST',
-            body: JSON.stringify(body),
-        }),
+        });
+    },
 
-    updateSubgroup: (id: string, body: UpdateSubgroupReq) =>
-        api<SubgroupDto>(`/api/subgroups/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(body),
-        }),
+    activate(id: UUID) {
+        return http<GroupResponse>(`/api/groups/${id}/activate`, {
+            method: 'POST',
+        });
+    },
 
-    archiveSubgroup: (id: string) =>
-        api<SubgroupDto>(`/api/subgroups/${id}/archive`, {method: 'POST'}),
+    addStudent(groupId: UUID, studentId: UUID) {
+        return http<GroupResponse>(`/api/groups/${groupId}/students/${studentId}`, {
+            method: 'POST',
+        });
+    },
+
+    removeStudent(groupId: UUID, studentId: UUID) {
+        return http<GroupResponse>(`/api/groups/${groupId}/students/${studentId}`, {
+            method: 'DELETE',
+        });
+    },
 };
