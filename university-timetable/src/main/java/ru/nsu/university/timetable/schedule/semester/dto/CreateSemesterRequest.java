@@ -20,9 +20,9 @@ public record CreateSemesterRequest(
         Instant endAt,
 
         @NotNull
-        UUID policyId,
+        String policyName,
 
-        List<UUID> courseIds,
+        List<String> courseCodes,
         List<String> roomCodes
 ) {
 }

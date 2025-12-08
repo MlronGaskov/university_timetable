@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record ScheduleSlotDto(
         UUID id,
-        UUID courseId,
+        String courseCode,
         String roomCode,
         DayOfWeek dayOfWeek,
         LocalTime startTime,

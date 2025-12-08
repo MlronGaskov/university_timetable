@@ -27,6 +27,7 @@ import java.util.UUID;
 )
 @EntityListeners(AuditingEntityListener.class)
 public class Semester {
+
     @Id
     @GeneratedValue
     private UUID id;
@@ -44,17 +45,17 @@ public class Semester {
     @Column(nullable = false, length = 16)
     private Status status;
 
+    @Column(name = "policy_name", nullable = false, length = 128)
+    private String policyName;
+
     @ElementCollection
     @CollectionTable(
             name = "semester_courses",
             joinColumns = @JoinColumn(name = "semester_id")
     )
-    @Column(name = "course_id", nullable = false)
+    @Column(name = "course_code", nullable = false, length = 64)
     @Builder.Default
-    private List<UUID> courseIds = new ArrayList<>();
-
-    @Column(name = "policy_id")
-    private UUID policyId;
+    private List<String> courseCodes = new ArrayList<>();
 
     @ElementCollection
     @CollectionTable(
@@ -78,6 +79,15 @@ public class Semester {
     private void normalize() {
         if (code != null) {
             code = code.trim();
+        }
+        if (policyName != null) {
+            policyName = policyName.trim();
+        }
+        if (courseCodes != null) {
+            courseCodes.replaceAll(s -> s == null ? null : s.trim());
+        }
+        if (roomCodes != null) {
+            roomCodes.replaceAll(s -> s == null ? null : s.trim());
         }
     }
 }

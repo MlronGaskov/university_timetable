@@ -2,7 +2,6 @@ package ru.nsu.university.timetable.solver.dto;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.UUID;
 
 public record SolverRequest(
         SemesterDto semester,
@@ -12,17 +11,17 @@ public record SolverRequest(
         PolicyDto policy
 ) {
     public record SemesterDto(
-            UUID id,
+            String code,
             Instant startAt,
             Instant endAt,
-            UUID policyId
+            String policyName
     ) {
     }
 
     public record CourseDto(
-            UUID id,
+            String code,
             String teacherId,
-            List<UUID> groupIds,
+            List<String> groupCodes,
             int plannedHours,
             int requiredRoomCapacity
     ) {
@@ -48,14 +47,14 @@ public record SolverRequest(
     }
 
     public record WorkingIntervalDto(
-            String day,       // "MONDAY"
-            String startTime, // "09:00"
-            String endTime    // "10:30"
+            String day,
+            String startTime,
+            String endTime
     ) {
     }
 
     public record PolicyDto(
-            UUID id,
+            String name,
             String gridJson,
             String breaksJson,
             String limitsJson,

@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public record ScheduleResponse(
         UUID id,
-        UUID semesterId,
+        String semesterCode,
         int version,
         Double evaluationScore,
         Instant createdAt,

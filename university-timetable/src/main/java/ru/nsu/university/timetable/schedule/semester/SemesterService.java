@@ -16,6 +16,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Transactional
 public class SemesterService {
+
     private final SemesterRepository semesterRepository;
 
     public SemesterResponse create(CreateSemesterRequest req) {
@@ -26,17 +27,13 @@ public class SemesterService {
         }
 
         Semester semester = Semester.builder()
-                .code(req.code())
+                .code(req.code().trim())
                 .startAt(req.startAt())
                 .endAt(req.endAt())
-                .policyId(req.policyId())
                 .status(Status.ACTIVE)
-                .courseIds(req.courseIds() == null
-                        ? new ArrayList<>()
-                        : new ArrayList<>(req.courseIds()))
-                .roomCodes(req.roomCodes() == null
-                        ? new ArrayList<>()
-                        : new ArrayList<>(req.roomCodes()))
+                .policyName(req.policyName().trim())
+                .courseCodes(normalizeList(req.courseCodes()))
+                .roomCodes(normalizeList(req.roomCodes()))
                 .build();
 
         return map(semesterRepository.save(semester));
@@ -51,9 +48,9 @@ public class SemesterService {
 
     @Transactional(readOnly = true)
     public SemesterResponse findOne(UUID id) {
-        return semesterRepository.findById(id)
-                .map(this::map)
+        Semester s = semesterRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
+        return map(s);
     }
 
     public SemesterResponse update(UUID id, UpdateSemesterRequest req) {
@@ -66,7 +63,7 @@ public class SemesterService {
                         "Semester with code '%s' already exists".formatted(req.code())
                 );
             }
-            semester.setCode(req.code());
+            semester.setCode(req.code().trim());
         }
 
         if (req.startAt() != null) {
@@ -77,16 +74,16 @@ public class SemesterService {
             semester.setEndAt(req.endAt());
         }
 
-        if (req.policyId() != null) {
-            semester.setPolicyId(req.policyId());
+        if (req.policyName() != null) {
+            semester.setPolicyName(req.policyName().trim());
         }
 
-        if (req.courseIds() != null) {
-            semester.setCourseIds(new ArrayList<>(req.courseIds()));
+        if (req.courseCodes() != null) {
+            semester.setCourseCodes(normalizeList(req.courseCodes()));
         }
 
         if (req.roomCodes() != null) {
-            semester.setRoomCodes(new ArrayList<>(req.roomCodes()));
+            semester.setRoomCodes(normalizeList(req.roomCodes()));
         }
 
         return map(semester);
@@ -95,7 +92,6 @@ public class SemesterService {
     public SemesterResponse archive(UUID id) {
         Semester semester = semesterRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
-
         semester.setStatus(Status.INACTIVE);
         return map(semester);
     }
@@ -103,9 +99,21 @@ public class SemesterService {
     public SemesterResponse activate(UUID id) {
         Semester semester = semesterRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
-
         semester.setStatus(Status.ACTIVE);
         return map(semester);
+    }
+
+    private List<String> normalizeList(List<String> list) {
+        if (list == null) return new ArrayList<>();
+        List<String> res = new ArrayList<>();
+        for (String v : list) {
+            if (v == null) continue;
+            String trimmed = v.trim();
+            if (!trimmed.isEmpty()) {
+                res.add(trimmed);
+            }
+        }
+        return res;
     }
 
     private SemesterResponse map(Semester s) {
@@ -115,8 +123,8 @@ public class SemesterService {
                 s.getStartAt(),
                 s.getEndAt(),
                 s.getStatus(),
-                s.getPolicyId(),
-                List.copyOf(s.getCourseIds()),
+                s.getPolicyName(),
+                List.copyOf(s.getCourseCodes()),
                 List.copyOf(s.getRoomCodes()),
                 s.getCreatedAt(),
                 s.getUpdatedAt()

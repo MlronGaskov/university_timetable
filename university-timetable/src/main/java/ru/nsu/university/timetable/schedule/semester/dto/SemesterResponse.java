@@ -12,8 +12,8 @@ public record SemesterResponse(
         Instant startAt,
         Instant endAt,
         Status status,
-        UUID policyId,
-        List<UUID> courseIds,
+        String policyId,
+        List<String> courseIds,
         List<String> roomCodes,
         Instant createdAt,
         Instant updatedAt

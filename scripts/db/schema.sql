@@ -161,18 +161,18 @@ CREATE TABLE IF NOT EXISTS course_items
 
 CREATE TABLE IF NOT EXISTS semesters
 (
-    id         UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-    code       VARCHAR(64) NOT NULL,
-    start_at   TIMESTAMPTZ NOT NULL,
-    end_at     TIMESTAMPTZ NOT NULL,
-    policy_id  UUID        NOT NULL,
-    status     VARCHAR(16) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id          UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    code        VARCHAR(64)  NOT NULL,
+    start_at    TIMESTAMPTZ  NOT NULL,
+    end_at      TIMESTAMPTZ  NOT NULL,
+    policy_name VARCHAR(128) NOT NULL,
+    status      VARCHAR(16)  NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     CONSTRAINT uk_semesters_code UNIQUE (code),
-    CONSTRAINT fk_semesters_policy
-        FOREIGN KEY (policy_id) REFERENCES policies (id)
+    CONSTRAINT fk_semesters_policy_name
+        FOREIGN KEY (policy_name) REFERENCES policies (name)
 );
 
 CREATE TABLE IF NOT EXISTS semester_rooms
@@ -188,35 +188,35 @@ CREATE TABLE IF NOT EXISTS semester_rooms
 
 CREATE TABLE IF NOT EXISTS semester_courses
 (
-    semester_id UUID NOT NULL,
-    course_id   UUID NOT NULL,
-    PRIMARY KEY (semester_id, course_id),
+    semester_id UUID        NOT NULL,
+    course_code VARCHAR(64) NOT NULL,
+    PRIMARY KEY (semester_id, course_code),
     CONSTRAINT fk_semester_courses_semester
         FOREIGN KEY (semester_id) REFERENCES semesters (id) ON DELETE CASCADE,
     CONSTRAINT fk_semester_courses_course
-        FOREIGN KEY (course_id) REFERENCES courses (id)
+        FOREIGN KEY (course_code) REFERENCES courses (code)
 );
 
 CREATE TABLE IF NOT EXISTS schedules
 (
     id               UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-    semester_id      UUID        NOT NULL,
+    semester_code    VARCHAR(64) NOT NULL,
     version          INTEGER     NOT NULL,
     evaluation_score DOUBLE PRECISION,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     CONSTRAINT fk_schedules_semester
-        FOREIGN KEY (semester_id) REFERENCES semesters (id) ON DELETE CASCADE,
+        FOREIGN KEY (semester_code) REFERENCES semesters (code) ON DELETE CASCADE,
     CONSTRAINT uk_schedules_semester_version
-        UNIQUE (semester_id, version)
+        UNIQUE (semester_code, version)
 );
 
 CREATE TABLE IF NOT EXISTS schedule_slots
 (
     id           UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     schedule_id  UUID        NOT NULL,
-    course_id    UUID        NOT NULL,
+    course_code  VARCHAR(64) NOT NULL,
     room_code    VARCHAR(64) NOT NULL,
     day_of_week  VARCHAR(16) NOT NULL,
     start_time   TIME        NOT NULL,
@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS schedule_slots
     CONSTRAINT fk_schedule_slots_schedule
         FOREIGN KEY (schedule_id) REFERENCES schedules (id) ON DELETE CASCADE,
     CONSTRAINT fk_schedule_slots_course
-        FOREIGN KEY (course_id) REFERENCES courses (id),
+        FOREIGN KEY (course_code) REFERENCES courses (code),
     CONSTRAINT fk_schedule_slots_room
         FOREIGN KEY (room_code) REFERENCES rooms (code)
 );

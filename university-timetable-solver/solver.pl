@@ -12,7 +12,7 @@ solve_handler(Request) :-
     MockResponse = _{
         slots: [
             _{
-                courseId: "00000000-0000-0000-0000-000000000001",
+                courseCode: "00000000-0000-0000-0000-000000000001",
                 roomCode: "MAIN-101",
                 dayOfWeek: "MONDAY",
                 startTime: "09:00",
@@ -22,7 +22,7 @@ solve_handler(Request) :-
                 weekPattern: "ODD_WEEKS"
             },
             _{
-                courseId: "00000000-0000-0000-0000-000000000002",
+                courseCode: "00000000-0000-0000-0000-000000000002",
                 roomCode: "MAIN-202",
                 dayOfWeek: "MONDAY",
                 startTime: "10:40",

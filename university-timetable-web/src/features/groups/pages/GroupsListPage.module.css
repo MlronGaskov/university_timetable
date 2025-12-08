@@ -1,0 +1,68 @@
+.studentsForm {
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-alt);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.studentsHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.studentsList {
+    list-style: none;
+    margin: 8px 0 4px;
+    padding: 0;
+    font-size: 14px;
+}
+
+.studentsRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.empty {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.studentId {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.selectorRow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 4px;
+}
+
+.studentsSelect {
+    min-width: 260px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--color-border-subtle);
+    background: #ffffff;
+    font-size: 14px;
+}
+
+.studentsError {
+    color: var(--color-danger);
+    font-size: 13px;
+}
+
+.studentsHint {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 4px 0 0;
+}

@@ -27,8 +27,8 @@ public class ScheduleService {
     private final PrologSolverClient solverClient;
 
     @Transactional(readOnly = true)
-    public List<ScheduleSummaryResponse> getSchedulesForSemester(UUID semesterId) {
-        return scheduleRepository.findBySemester_IdOrderByVersionDesc(semesterId).stream()
+    public List<ScheduleSummaryResponse> getSchedulesForSemester(String semesterCode) {
+        return scheduleRepository.findBySemester_CodeOrderByVersionDesc(semesterCode).stream()
                 .map(this::toSummaryDto)
                 .toList();
     }
@@ -40,11 +40,11 @@ public class ScheduleService {
         return toDetailsDto(schedule);
     }
 
-    public ScheduleResponse generateSchedule(UUID semesterId) {
-        Semester semester = semesterRepository.findById(semesterId)
-                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + semesterId));
+    public ScheduleResponse generateSchedule(String semesterCode) {
+        Semester semester = semesterRepository.findByCodeIgnoreCase(semesterCode)
+                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + semesterCode));
 
-        int nextVersion = scheduleRepository.findTopBySemester_IdOrderByVersionDesc(semesterId)
+        int nextVersion = scheduleRepository.findTopBySemester_CodeOrderByVersionDesc(semesterCode)
                 .map(s -> s.getVersion() + 1)
                 .orElse(1);
 
@@ -62,7 +62,7 @@ public class ScheduleService {
         solverResponse.slots().forEach(slot -> {
             ScheduleSlot entitySlot = ScheduleSlot.builder()
                     .schedule(schedule)
-                    .courseId(slot.courseId())
+                    .courseCode(slot.courseCode())
                     .roomCode(slot.roomCode())
                     .dayOfWeek(java.time.DayOfWeek.valueOf(slot.dayOfWeek()))
                     .startTime(LocalTime.parse(slot.startTime()))
@@ -81,7 +81,7 @@ public class ScheduleService {
     private ScheduleSummaryResponse toSummaryDto(Schedule s) {
         return new ScheduleSummaryResponse(
                 s.getId(),
-                s.getSemester().getId(),
+                s.getSemester().getCode(),
                 s.getVersion(),
                 s.getEvaluationScore(),
                 s.getCreatedAt(),
@@ -93,7 +93,7 @@ public class ScheduleService {
         List<ScheduleSlotDto> slots = s.getSlots().stream()
                 .map(slot -> new ScheduleSlotDto(
                         slot.getId(),
-                        slot.getCourseId(),
+                        slot.getCourseCode(),
                         slot.getRoomCode(),
                         slot.getDayOfWeek(),
                         slot.getStartTime(),
@@ -106,7 +106,7 @@ public class ScheduleService {
 
         return new ScheduleResponse(
                 s.getId(),
-                s.getSemester().getId(),
+                s.getSemester().getCode(),
                 s.getVersion(),
                 s.getEvaluationScore(),
                 s.getCreatedAt(),
@@ -118,10 +118,10 @@ public class ScheduleService {
     private SolverRequest buildStubRequest(Semester semester) {
         return new SolverRequest(
                 new SolverRequest.SemesterDto(
-                        semester.getId(),
+                        semester.getCode(),
                         semester.getStartAt(),
                         semester.getEndAt(),
-                        semester.getPolicyId()
+                        semester.getPolicyName()
                 ),
                 List.of(),
                 List.of(),

@@ -48,7 +48,6 @@ export const SemesterSchedulesPage: React.FC = () => {
         setError(null);
         try {
             const newSchedule = await schedulesApi.generateForSemester(semesterId);
-            // Добавляем новую версию в начало списка
             setSchedules(prev => [newSchedule, ...prev]);
         } catch (e) {
             console.error(e);
@@ -80,7 +79,7 @@ export const SemesterSchedulesPage: React.FC = () => {
             {semester && (
                 <p style={{marginTop: 0, marginBottom: 16, fontSize: 13}}>
                     Период: {formatDate(semester.startAt)} — {formatDate(semester.endAt)} | Политика:{' '}
-                    <code>{semester.policyId}</code>
+                    <code>{semester.policyName}</code>
                 </p>
             )}
 

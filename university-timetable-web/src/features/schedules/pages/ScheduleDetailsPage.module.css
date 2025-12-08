@@ -1,0 +1,146 @@
+.infoLine {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.error {
+    color: var(--color-danger);
+    margin-bottom: 8px;
+}
+
+.filtersBar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border-radius: 999px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border-subtle);
+}
+
+.modeBlock {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.modeLabel {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+.select {
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    background: #ffffff;
+    font-size: 13px;
+}
+
+.daysGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+}
+
+.dayCard {
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid var(--color-border-subtle);
+    padding: 10px 10px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dayHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+}
+
+.dayLabel {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.daySubLabel {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+}
+
+.slotsList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.slotRow {
+    border-radius: 12px;
+    padding: 6px 8px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.slotTime {
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.weekTag {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-muted);
+}
+
+.slotMain {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13px;
+}
+
+.slotTitle {
+    font-weight: 600;
+}
+
+.slotTitleSecondary {
+    font-weight: 400;
+    color: var(--color-text-muted);
+}
+
+.slotLine {
+    display: flex;
+    gap: 4px;
+    align-items: baseline;
+}
+
+.label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    min-width: 80px;
+}
+
+.muted {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}

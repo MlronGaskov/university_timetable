@@ -4,8 +4,8 @@ export interface CreateSemesterRequest {
     code: string;
     startAt: string;
     endAt: string;
-    policyId: UUID;
-    courseIds?: UUID[] | null;
+    policyName: string;
+    courseCodes?: string[] | null;
     roomCodes?: string[] | null;
 }
 
@@ -13,8 +13,8 @@ export interface UpdateSemesterRequest {
     code?: string;
     startAt?: string;
     endAt?: string;
-    policyId?: UUID;
-    courseIds?: UUID[] | null;
+    policyName?: string;
+    courseCodes?: string[] | null;
     roomCodes?: string[] | null;
 }
 
@@ -24,8 +24,8 @@ export interface SemesterResponse {
     startAt: string;
     endAt: string;
     status: Status;
-    policyId: UUID;
-    courseIds: UUID[];
+    policyName: string;
+    courseCodes: string[];
     roomCodes: string[];
     createdAt: string;
     updatedAt: string;

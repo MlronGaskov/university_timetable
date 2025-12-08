@@ -22,7 +22,7 @@ import java.util.UUID;
         name = "schedules",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_schedules_semester_version",
-                columnNames = {"semester_id", "version"}
+                columnNames = {"semester_code", "version"}
         )
 )
 @EntityListeners(AuditingEntityListener.class)
@@ -33,7 +33,11 @@ public class Schedule {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "semester_id", nullable = false)
+    @JoinColumn(
+            name = "semester_code",
+            referencedColumnName = "code",
+            nullable = false
+    )
     private Semester semester;
 
     @Column(nullable = false)

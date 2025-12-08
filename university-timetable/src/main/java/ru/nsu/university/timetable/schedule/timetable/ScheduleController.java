@@ -16,9 +16,9 @@ public class ScheduleController {
 
     private final ScheduleService scheduleService;
 
-    @GetMapping("/semesters/{semesterId}/schedules")
-    public List<ScheduleSummaryResponse> getSchedulesForSemester(@PathVariable UUID semesterId) {
-        return scheduleService.getSchedulesForSemester(semesterId);
+    @GetMapping("/semesters/{semesterCode}/schedules")
+    public List<ScheduleSummaryResponse> getSchedulesForSemester(@PathVariable String semesterCode) {
+        return scheduleService.getSchedulesForSemester(semesterCode);
     }
 
     @GetMapping("/schedules/{scheduleId}")
@@ -26,9 +26,9 @@ public class ScheduleController {
         return scheduleService.getSchedule(scheduleId);
     }
 
-    @PostMapping("/semesters/{semesterId}/schedules/generate")
+    @PostMapping("/semesters/{semesterCode}/schedules/generate")
     @PreAuthorize("hasRole('ADMIN')")
-    public ScheduleResponse generateSchedule(@PathVariable UUID semesterId) {
-        return scheduleService.generateSchedule(semesterId);
+    public ScheduleResponse generateSchedule(@PathVariable String semesterCode) {
+        return scheduleService.generateSchedule(semesterCode);
     }
 }

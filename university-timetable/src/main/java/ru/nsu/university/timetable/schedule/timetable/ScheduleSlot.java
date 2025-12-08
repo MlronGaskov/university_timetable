@@ -27,8 +27,8 @@ public class ScheduleSlot {
     @JoinColumn(name = "schedule_id", nullable = false)
     private Schedule schedule;
 
-    @Column(name = "course_id", nullable = false)
-    private UUID courseId;
+    @Column(name = "course_code", nullable = false)
+    private String courseCode;
 
     @Column(name = "room_code", nullable = false, length = 64)
     private String roomCode;

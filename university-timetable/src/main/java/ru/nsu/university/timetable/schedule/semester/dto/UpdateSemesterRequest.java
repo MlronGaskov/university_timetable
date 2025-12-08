@@ -12,8 +12,8 @@ public record UpdateSemesterRequest(
 
         Instant startAt,
         Instant endAt,
-        UUID policyId,
-        List<UUID> courseIds,
+        String policyName,
+        List<String> courseCodes,
         List<String> roomCodes
 ) {
 }
