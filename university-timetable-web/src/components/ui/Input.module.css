@@ -3,7 +3,7 @@
     padding: 8px 10px;
     border-radius: 10px;
     border: 1px solid var(--color-border-subtle);
-    background: rgba(15, 23, 42, 0.9);
+    background: #ffffff;
     color: var(--color-text);
     font-size: 14px;
 }
@@ -15,5 +15,5 @@
 .root:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
 }

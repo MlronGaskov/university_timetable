@@ -1,0 +1,16 @@
+.root {
+    margin-bottom: 12px;
+}
+
+.error {
+    color: var(--color-danger);
+    white-space: pre-wrap;
+    font-size: 13px;
+    margin: 0 0 4px;
+}
+
+.result {
+    white-space: pre-wrap;
+    font-size: 13px;
+    margin: 0;
+}

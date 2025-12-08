@@ -27,6 +27,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://university-timetable-db:5432/university_timetable
       SPRING_DATASOURCE_USERNAME: app
       SPRING_DATASOURCE_PASSWORD: app
+      SOLVER_BASE_URL: http://university-timetable-solver:5000
     depends_on:
       university-timetable-db:
         condition: service_healthy
@@ -63,6 +64,14 @@ services:
       - ./db/init-root-user.sh:/init-root-user.sh:ro
     entrypoint: ["/bin/sh", "/init-root-user.sh"]
     restart: "no"
+
+  university-timetable-solver:
+    build:
+      context: ../university-timetable-solver
+      dockerfile: Dockerfile
+    container_name: university-timetable-solver
+    ports:
+      - "5000:5000"
 
 volumes:
   pgdata:

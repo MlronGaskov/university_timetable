@@ -196,3 +196,42 @@ CREATE TABLE IF NOT EXISTS semester_courses
     CONSTRAINT fk_semester_courses_course
         FOREIGN KEY (course_id) REFERENCES courses (id)
 );
+
+CREATE TABLE IF NOT EXISTS schedules
+(
+    id               UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    semester_id      UUID        NOT NULL,
+    version          INTEGER     NOT NULL,
+    evaluation_score DOUBLE PRECISION,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_schedules_semester
+        FOREIGN KEY (semester_id) REFERENCES semesters (id) ON DELETE CASCADE,
+    CONSTRAINT uk_schedules_semester_version
+        UNIQUE (semester_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS schedule_slots
+(
+    id           UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    schedule_id  UUID        NOT NULL,
+    course_id    UUID        NOT NULL,
+    room_code    VARCHAR(64) NOT NULL,
+    day_of_week  VARCHAR(16) NOT NULL,
+    start_time   TIME        NOT NULL,
+    end_time     TIME        NOT NULL,
+    valid_from   DATE        NOT NULL,
+    valid_until  DATE        NOT NULL,
+    week_pattern VARCHAR(16) NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_schedule_slots_schedule
+        FOREIGN KEY (schedule_id) REFERENCES schedules (id) ON DELETE CASCADE,
+    CONSTRAINT fk_schedule_slots_course
+        FOREIGN KEY (course_id) REFERENCES courses (id),
+    CONSTRAINT fk_schedule_slots_room
+        FOREIGN KEY (room_code) REFERENCES rooms (code)
+);
+

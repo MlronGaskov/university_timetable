@@ -1,0 +1,8 @@
+.tempPassword {
+    white-space: pre-wrap;
+    font-size: 13px;
+    background: #fef3c7;
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}

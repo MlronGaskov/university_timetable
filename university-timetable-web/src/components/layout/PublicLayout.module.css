@@ -3,14 +3,14 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at top, #0f172a, #020617);
+    background: radial-gradient(circle at top, #e5e7eb, #f9fafb);
 }
 
 .card {
     width: 360px;
     padding: 24px;
     border-radius: 16px;
-    background: rgba(15, 23, 42, 0.95);
-    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: #ffffff;
+    border: 1px solid var(--color-border);
     box-shadow: var(--shadow-soft);
 }

@@ -13,6 +13,9 @@ spring:
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
 
+solver:
+  base-url: http://localhost:5000
+
 app:
   jwt:
     issuer: university-timetable

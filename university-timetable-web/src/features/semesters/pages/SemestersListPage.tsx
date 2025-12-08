@@ -3,6 +3,7 @@ import {Page} from '@/components/layout/Page';
 import {semestersApi} from '@/api/semesters';
 import type {SemesterResponse} from '@/types/semesters';
 import {formatDate} from '@/utils/formatters';
+import {Link} from "react-router-dom";
 
 export const SemestersListPage: React.FC = () => {
     const [items, setItems] = useState<SemesterResponse[]>([]);
@@ -33,6 +34,7 @@ export const SemestersListPage: React.FC = () => {
                         <th align="left">Начало</th>
                         <th align="left">Конец</th>
                         <th align="left">Статус</th>
+                        <th align="left">Расписания</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -42,11 +44,14 @@ export const SemestersListPage: React.FC = () => {
                             <td>{formatDate(s.startAt)}</td>
                             <td>{formatDate(s.endAt)}</td>
                             <td>{s.status}</td>
+                            <td>
+                                <Link to={`/semesters/${s.id}/schedules`}>Открыть</Link>
+                            </td>
                         </tr>
                     ))}
                     {items.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={4}>Нет семестров</td>
+                            <td colSpan={5}>Нет семестров</td>
                         </tr>
                     )}
                     </tbody>

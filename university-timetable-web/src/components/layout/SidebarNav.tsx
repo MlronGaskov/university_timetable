@@ -14,7 +14,6 @@ export const SidebarNav: React.FC = () => {
                     Профиль
                 </NavLink>
 
-                <div className={styles.sectionTitle}>Учебный процесс</div>
                 <NavLink to="/courses" className={({isActive}) => isActive ? styles.activeLink : styles.link}>
                     Курсы
                 </NavLink>
@@ -36,7 +35,6 @@ export const SidebarNav: React.FC = () => {
 
                 {isAdmin && (
                     <>
-                        <div className={styles.sectionTitle}>Администрирование</div>
                         <NavLink to="/admin/users"
                                  className={({isActive}) => isActive ? styles.activeLink : styles.link}>
                             Пользователи
@@ -45,18 +43,6 @@ export const SidebarNav: React.FC = () => {
                             Политики
                         </NavLink>
                     </>
-                )}
-
-                {isTeacher && (
-                    <NavLink to="/teacher" className={({isActive}) => isActive ? styles.activeLink : styles.link}>
-                        Кабинет преподавателя
-                    </NavLink>
-                )}
-
-                {isStudent && (
-                    <NavLink to="/student" className={({isActive}) => isActive ? styles.activeLink : styles.link}>
-                        Кабинет студента
-                    </NavLink>
                 )}
             </nav>
         </aside>

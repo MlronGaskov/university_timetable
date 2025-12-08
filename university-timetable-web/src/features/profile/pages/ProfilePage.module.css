@@ -1,0 +1,131 @@
+.grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 16px;
+}
+
+.card {
+    border-radius: 16px;
+    padding: 16px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+
+.sectionTitle {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.infoList {
+    margin: 0 0 8px;
+    padding: 0;
+}
+
+.infoList > div {
+    margin-bottom: 4px;
+}
+
+.infoList dt {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+}
+
+.infoList dd {
+    margin: 0;
+    font-size: 14px;
+}
+
+.muted {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin-top: 8px;
+}
+
+.list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.teacherHeader {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+}
+
+.teacherName {
+    font-weight: 600;
+}
+
+.badge {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-muted);
+}
+
+.hoursSummary {
+    margin: 8px 0 12px;
+    padding-left: 18px;
+    font-size: 13px;
+}
+
+.hoursForm {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-alt);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hoursFormHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.hoursRow {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 14px;
+}
+
+.hoursDay {
+    font-size: 14px;
+}
+
+.hoursFooter {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.hint {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 4px 0 0;
+}
+
+.error {
+    color: var(--color-danger);
+    font-size: 13px;
+}
+
+@media (max-width: 900px) {
+    .grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
