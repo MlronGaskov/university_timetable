@@ -52,17 +52,17 @@ public class CourseController {
         return service.activate(id);
     }
 
-    @PostMapping("/{courseId}/groups/{groupId}")
+    @PostMapping("/{courseId}/groups/{groupCode}")
     @PreAuthorize("hasRole('ADMIN')")
     public CourseResponse addGroup(@PathVariable UUID courseId,
-                                   @PathVariable UUID groupId) {
-        return service.addGroup(courseId, groupId);
+                                   @PathVariable String groupCode) {
+        return service.addGroup(courseId, groupCode);
     }
 
-    @DeleteMapping("/{courseId}/groups/{groupId}")
+    @DeleteMapping("/{courseId}/groups/{groupCode}")
     @PreAuthorize("hasRole('ADMIN')")
     public CourseResponse removeGroup(@PathVariable UUID courseId,
-                                      @PathVariable UUID groupId) {
-        return service.removeGroup(courseId, groupId);
+                                      @PathVariable String groupCode) {
+        return service.removeGroup(courseId, groupCode);
     }
 }

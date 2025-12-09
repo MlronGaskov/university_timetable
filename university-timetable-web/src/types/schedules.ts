@@ -5,7 +5,7 @@ export type WeekPattern = 'EVERY_WEEK' | 'ODD_WEEKS' | 'EVEN_WEEKS';
 
 export interface ScheduleSlotDto {
     id: UUID;
-    courseId: UUID;
+    courseCode: string;
     roomCode: string;
     dayOfWeek: DayOfWeek;
     startTime: string;
@@ -17,7 +17,7 @@ export interface ScheduleSlotDto {
 
 export interface ScheduleSummaryResponse {
     id: UUID;
-    semesterId: UUID;
+    semesterCode: string;
     version: number;
     evaluationScore: number | null;
     createdAt: string;
@@ -26,7 +26,7 @@ export interface ScheduleSummaryResponse {
 
 export interface ScheduleResponse {
     id: UUID;
-    semesterId: UUID;
+    semesterCode: string;
     version: number;
     evaluationScore: number | null;
     createdAt: string;

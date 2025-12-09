@@ -91,26 +91,36 @@ public class GroupService {
         return map(g);
     }
 
-    public GroupResponse addStudent(UUID groupId, UUID studentId) {
+    public GroupResponse addStudent(UUID groupId, String studentId) {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found: " + groupId));
 
-        if (!studentRepository.existsById(studentId)) {
-            throw new IllegalArgumentException("Student not found: " + studentId);
+        if (studentId == null || studentId.isBlank()) {
+            throw new IllegalArgumentException("studentId must not be blank");
+        }
+        String normalized = studentId.trim();
+
+        if (!studentRepository.existsByStudentId(normalized)) {
+            throw new IllegalArgumentException("Student not found: " + normalized);
         }
 
-        if (!group.getStudentIds().contains(studentId)) {
-            group.getStudentIds().add(studentId);
+        if (!group.getStudentIds().contains(normalized)) {
+            group.getStudentIds().add(normalized);
         }
 
         return map(group);
     }
 
-    public GroupResponse removeStudent(UUID groupId, UUID studentId) {
+    public GroupResponse removeStudent(UUID groupId, String studentId) {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found: " + groupId));
 
-        group.getStudentIds().remove(studentId);
+        if (studentId == null || studentId.isBlank()) {
+            return map(group);
+        }
+        String normalized = studentId.trim();
+
+        group.getStudentIds().remove(normalized);
 
         return map(group);
     }

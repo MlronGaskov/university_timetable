@@ -49,9 +49,9 @@ public class Group {
             name = "group_students",
             joinColumns = @JoinColumn(name = "group_id")
     )
-    @Column(name = "student_id", nullable = false)
+    @Column(name = "student_id", nullable = false, length = 64)
     @Builder.Default
-    private List<UUID> studentIds = new ArrayList<>();
+    private List<String> studentIds = new ArrayList<>();
 
     @CreatedDate
     @Column(nullable = false, updatable = false)

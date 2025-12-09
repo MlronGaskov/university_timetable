@@ -20,5 +20,5 @@ export interface GroupResponse {
     status: Status;
     createdAt: string;
     updatedAt: string;
-    studentIds: UUID[];
+    studentIds: string[];
 }

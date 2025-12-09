@@ -41,41 +41,48 @@ public class ScheduleService {
     }
 
     public ScheduleResponse generateSchedule(String semesterCode) {
-        Semester semester = semesterRepository.findByCodeIgnoreCase(semesterCode)
-                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + semesterCode));
+        try {
+            Semester semester = semesterRepository.findByCodeIgnoreCase(semesterCode)
+                    .orElseThrow(() -> {
+                        System.out.println("Semester not found by code=" + semesterCode);
+                        return new IllegalArgumentException("Semester not found: " + semesterCode);
+                    });
 
-        int nextVersion = scheduleRepository.findTopBySemester_CodeOrderByVersionDesc(semesterCode)
-                .map(s -> s.getVersion() + 1)
-                .orElse(1);
+            int nextVersion = scheduleRepository.findTopBySemester_CodeOrderByVersionDesc(semesterCode)
+                    .map(s -> s.getVersion() + 1)
+                    .orElse(1);
 
-        // TODO: собрать реальный SolverRequest из Course/Room/Teacher/Policy
-        SolverRequest solverRequest = buildStubRequest(semester);
+            SolverRequest solverRequest = buildStubRequest(semester);
 
-        SolverResponse solverResponse = solverClient.solve(solverRequest);
+            SolverResponse solverResponse = solverClient.solve(solverRequest);
 
-        Schedule schedule = Schedule.builder()
-                .semester(semester)
-                .version(nextVersion)
-                .evaluationScore(solverResponse.evaluationScore())
-                .build();
-
-        solverResponse.slots().forEach(slot -> {
-            ScheduleSlot entitySlot = ScheduleSlot.builder()
-                    .schedule(schedule)
-                    .courseCode(slot.courseCode())
-                    .roomCode(slot.roomCode())
-                    .dayOfWeek(java.time.DayOfWeek.valueOf(slot.dayOfWeek()))
-                    .startTime(LocalTime.parse(slot.startTime()))
-                    .endTime(LocalTime.parse(slot.endTime()))
-                    .validFrom(LocalDate.parse(slot.validFrom()))
-                    .validUntil(LocalDate.parse(slot.validUntil()))
-                    .weekPattern(slot.weekPattern())
+            Schedule schedule = Schedule.builder()
+                    .semester(semester)
+                    .version(nextVersion)
+                    .evaluationScore(solverResponse.evaluationScore())
                     .build();
-            schedule.addSlot(entitySlot);
-        });
 
-        Schedule saved = scheduleRepository.save(schedule);
-        return toDetailsDto(saved);
+            solverResponse.slots().forEach(slot -> {
+                ScheduleSlot entitySlot = ScheduleSlot.builder()
+                        .schedule(schedule)
+                        .courseCode(slot.courseCode())
+                        .roomCode(slot.roomCode())
+                        .dayOfWeek(java.time.DayOfWeek.valueOf(slot.dayOfWeek()))
+                        .startTime(LocalTime.parse(slot.startTime()))
+                        .endTime(LocalTime.parse(slot.endTime()))
+                        .validFrom(LocalDate.parse(slot.validFrom()))
+                        .validUntil(LocalDate.parse(slot.validUntil()))
+                        .weekPattern(slot.weekPattern())
+                        .build();
+                schedule.addSlot(entitySlot);
+            });
+
+            Schedule saved = scheduleRepository.save(schedule);
+            return toDetailsDto(saved);
+        } catch (Exception ex) {
+            System.out.println("Error while generating schedule for semesterCode={}" + semesterCode + ex);
+            throw ex;
+        }
     }
 
     private ScheduleSummaryResponse toSummaryDto(Schedule s) {

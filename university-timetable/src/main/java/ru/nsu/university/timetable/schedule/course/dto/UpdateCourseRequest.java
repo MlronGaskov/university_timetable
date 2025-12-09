@@ -5,7 +5,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
-import java.util.UUID;
 
 public record UpdateCourseRequest(
         @Size(max = 64)
@@ -23,6 +22,6 @@ public record UpdateCourseRequest(
         @Valid
         List<CourseEquipmentItemDto> equipmentRequirements,
 
-        List<UUID> groupIds
+        List<String> groupCodes
 ) {
 }

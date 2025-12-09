@@ -10,7 +10,7 @@ import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Button} from '@/components/ui/Button';
 
 export const SemesterSchedulesPage: React.FC = () => {
-    const {semesterId} = useParams<'semesterId'>();
+    const {semesterCode} = useParams<{ semesterCode: string }>();
 
     const {isAdmin} = useRoleGuard();
 
@@ -21,16 +21,22 @@ export const SemesterSchedulesPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (!semesterId) return;
+        if (!semesterCode) return;
 
         (async () => {
             setLoading(true);
             setError(null);
             try {
-                const [sem, scheds] = await Promise.all([
-                    semestersApi.getById(semesterId),
-                    schedulesApi.getForSemester(semesterId),
+                const [allSemesters, scheds] = await Promise.all([
+                    semestersApi.getAll(),
+                    schedulesApi.getForSemester(semesterCode),
                 ]);
+
+                const sem =
+                    allSemesters.find(
+                        (s) => s.code.toLowerCase() === semesterCode.toLowerCase(),
+                    ) ?? null;
+
                 setSemester(sem);
                 setSchedules(scheds);
             } catch (e) {
@@ -40,14 +46,15 @@ export const SemesterSchedulesPage: React.FC = () => {
                 setLoading(false);
             }
         })();
-    }, [semesterId]);
+    }, [semesterCode]);
 
     const handleGenerate = async () => {
-        if (!semesterId) return;
+        if (!semester) return;
         setGenerating(true);
         setError(null);
         try {
-            const newSchedule = await schedulesApi.generateForSemester(semesterId);
+            console.log(semester.code)
+            const newSchedule = await schedulesApi.generateForSemester(semester!.code);
             setSchedules(prev => [newSchedule, ...prev]);
         } catch (e) {
             console.error(e);
@@ -65,7 +72,7 @@ export const SemesterSchedulesPage: React.FC = () => {
         <Page
             title={title}
             actions={
-                isAdmin && semesterId ? (
+                isAdmin && semesterCode ? (
                     <Button
                         variant="primary"
                         onClick={handleGenerate}

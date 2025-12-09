@@ -11,7 +11,7 @@ export interface CreateCourseRequest {
     teacherId: string;
     plannedHours: number;
     equipmentRequirements: CourseEquipmentItemDto[];
-    groupIds: UUID[];
+    groupCodes: string[];
 }
 
 export interface UpdateCourseRequest {
@@ -20,7 +20,7 @@ export interface UpdateCourseRequest {
     teacherId?: string;
     plannedHours?: number;
     equipmentRequirements?: CourseEquipmentItemDto[] | null;
-    groupIds?: UUID[] | null;
+    groupCodes?: string[] | null;
 }
 
 export interface CourseResponse {
@@ -31,7 +31,7 @@ export interface CourseResponse {
     plannedHours: number;
     requiredRoomCapacity: number;
     teacherId: string;
-    groupIds: UUID[];
+    groupCodes: string[];
     equipmentRequirements: CourseEquipmentItemDto[];
     createdAt: string;
     updatedAt: string;

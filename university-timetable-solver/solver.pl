@@ -12,8 +12,8 @@ solve_handler(Request) :-
     MockResponse = _{
         slots: [
             _{
-                courseCode: "00000000-0000-0000-0000-000000000001",
-                roomCode: "MAIN-101",
+                courseCode: "MATH-201",
+                roomCode: "A-101",
                 dayOfWeek: "MONDAY",
                 startTime: "09:00",
                 endTime: "10:30",
@@ -22,8 +22,8 @@ solve_handler(Request) :-
                 weekPattern: "ODD_WEEKS"
             },
             _{
-                courseCode: "00000000-0000-0000-0000-000000000002",
-                roomCode: "MAIN-202",
+                courseCode: "PHY-150",
+                roomCode: "B-202",
                 dayOfWeek: "MONDAY",
                 startTime: "10:40",
                 endTime: "12:10",
@@ -34,4 +34,4 @@ solve_handler(Request) :-
         ]
     },
 
-    http_reply_json_dict(MockResponse).
+    reply_json_dict(MockResponse).

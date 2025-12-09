@@ -2,7 +2,12 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {coursesApi} from '@/api/courses';
 import {groupsApi} from '@/api/groups';
-import type {CourseEquipmentItemDto, CourseResponse, CreateCourseRequest, UpdateCourseRequest,} from '@/types/courses';
+import type {
+    CourseEquipmentItemDto,
+    CourseResponse,
+    CreateCourseRequest,
+    UpdateCourseRequest,
+} from '@/types/courses';
 import type {GroupResponse} from '@/types/groups';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Input} from '@/components/ui/Input';
@@ -23,7 +28,7 @@ interface CsvRow {
     teacherId: string;
     plannedHours: number;
     equipmentJson: string | null;
-    groupIds: string[];
+    groupCodes: string[];
     rowNumber: number;
 }
 
@@ -75,7 +80,7 @@ export const CoursesListPage: React.FC = () => {
     const [csvProcessing, setCsvProcessing] = useState(false);
 
     const [groupsCourseId, setGroupsCourseId] = useState<string | null>(null);
-    const [groupToAddId, setGroupToAddId] = useState('');
+    const [groupToAddCode, setGroupToAddCode] = useState('');
     const [groupsError, setGroupsError] = useState<string | null>(null);
     const [groupsProcessing, setGroupsProcessing] = useState(false);
 
@@ -182,7 +187,7 @@ export const CoursesListPage: React.FC = () => {
                     teacherId: teacherId.trim(),
                     plannedHours: hours,
                     equipmentRequirements: normalizedEquipment,
-                    groupIds: [],
+                    groupCodes: [],
                 };
                 const created = await coursesApi.create(body);
                 setItems(prev => [...prev, created]);
@@ -234,45 +239,48 @@ export const CoursesListPage: React.FC = () => {
     };
 
     const currentCourse = useMemo(
-        () => (groupsCourseId ? items.find(c => c.id === groupsCourseId) ?? null : null),
+        () =>
+            groupsCourseId
+                ? items.find(c => c.id === groupsCourseId) ?? null
+                : null,
         [groupsCourseId, items],
     );
 
     const currentCourseGroups: GroupResponse[] = useMemo(() => {
         if (!currentCourse) return [];
-        const ids = new Set(currentCourse.groupIds);
-        return groups.filter(g => ids.has(g.id));
+        const codes = new Set(currentCourse.groupCodes);
+        return groups.filter(g => codes.has(g.code));
     }, [currentCourse, groups]);
 
     const availableGroups: GroupResponse[] = useMemo(() => {
         if (!currentCourse) return [];
-        const ids = new Set(currentCourse.groupIds);
-        return groups.filter(g => !ids.has(g.id));
+        const codes = new Set(currentCourse.groupCodes);
+        return groups.filter(g => !codes.has(g.code));
     }, [currentCourse, groups]);
 
     const openGroupsForm = (c: CourseResponse) => {
         if (!isAdmin) return;
         setGroupsCourseId(c.id);
-        setGroupToAddId('');
+        setGroupToAddCode('');
         setGroupsError(null);
     };
 
     const closeGroupsForm = () => {
         setGroupsCourseId(null);
-        setGroupToAddId('');
+        setGroupToAddCode('');
         setGroupsError(null);
     };
 
     const handleAddGroup: React.FormEventHandler = async e => {
         e.preventDefault();
-        if (!isAdmin || !groupsCourseId || !groupToAddId) return;
+        if (!isAdmin || !groupsCourseId || !groupToAddCode) return;
 
         setGroupsProcessing(true);
         setGroupsError(null);
         try {
-            const updated = await coursesApi.addGroup(groupsCourseId, groupToAddId);
+            const updated = await coursesApi.addGroup(groupsCourseId, groupToAddCode);
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-            setGroupToAddId('');
+            setGroupToAddCode('');
         } catch (err) {
             console.error(err);
             setGroupsError('Не удалось добавить группу к курсу');
@@ -281,13 +289,13 @@ export const CoursesListPage: React.FC = () => {
         }
     };
 
-    const handleRemoveGroup = async (groupId: string) => {
+    const handleRemoveGroup = async (groupCode: string) => {
         if (!isAdmin || !groupsCourseId) return;
 
         setGroupsProcessing(true);
         setGroupsError(null);
         try {
-            const updated = await coursesApi.removeGroup(groupsCourseId, groupId);
+            const updated = await coursesApi.removeGroup(groupsCourseId, groupCode);
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
         } catch (err) {
             console.error(err);
@@ -309,7 +317,7 @@ export const CoursesListPage: React.FC = () => {
         const idxTeacherId = idx('teacherId');
         const idxPlannedHours = idx('plannedHours');
         const idxEquipmentJson = idx('equipmentJson');
-        const idxGroupIds = idx('groupIds');
+        const idxGroupCodes = idx('groupCodes');
 
         if (
             idxCode < 0 ||
@@ -318,7 +326,7 @@ export const CoursesListPage: React.FC = () => {
             idxPlannedHours < 0
         ) {
             throw new Error(
-                'Ожидаются колонки как минимум: code,title,teacherId,plannedHours[,equipmentJson,groupIds]',
+                'Ожидаются колонки как минимум: code,title,teacherId,plannedHours[,equipmentJson,groupCodes]',
             );
         }
 
@@ -333,11 +341,11 @@ export const CoursesListPage: React.FC = () => {
             const hoursStr = safe(idxPlannedHours);
             const hours = Number.parseInt(hoursStr, 10);
 
-            let groupIds: string[] = [];
-            if (idxGroupIds >= 0) {
-                const raw = safe(idxGroupIds);
+            let groupCodes: string[] = [];
+            if (idxGroupCodes >= 0) {
+                const raw = safe(idxGroupCodes);
                 if (raw) {
-                    groupIds = raw
+                    groupCodes = raw
                         .split(';')
                         .map(s => s.trim())
                         .filter(Boolean);
@@ -351,7 +359,7 @@ export const CoursesListPage: React.FC = () => {
                 plannedHours: hours,
                 equipmentJson:
                     idxEquipmentJson >= 0 ? safe(idxEquipmentJson) || null : null,
-                groupIds,
+                groupCodes,
                 rowNumber: i + 1,
             });
         }
@@ -430,7 +438,7 @@ export const CoursesListPage: React.FC = () => {
                         teacherId: row.teacherId,
                         plannedHours: row.plannedHours,
                         equipmentRequirements: parsedEquipment,
-                        groupIds: row.groupIds,
+                        groupCodes: row.groupCodes,
                     };
                     const created = await coursesApi.create(body);
                     success++;
@@ -475,7 +483,7 @@ export const CoursesListPage: React.FC = () => {
                 'createdAt',
                 'updatedAt',
                 'equipmentJson',
-                'groupIds',
+                'groupCodes',
             ],
             items.map(c => [
                 c.code,
@@ -487,7 +495,7 @@ export const CoursesListPage: React.FC = () => {
                 c.createdAt,
                 c.updatedAt,
                 JSON.stringify(c.equipmentRequirements ?? []),
-                c.groupIds.join(';'),
+                c.groupCodes.join(';'),
             ]),
         );
     };
@@ -505,7 +513,7 @@ export const CoursesListPage: React.FC = () => {
 
     return (
         <Page title="Курсы" actions={actions}>
-            <CsvMessages error={csvError} result={csvResult}/>
+            <CsvMessages error={csvError} result={csvResult} />
 
             {isAdmin && groupsCourseId && currentCourse && (
                 <form className={styles.groupsForm} onSubmit={handleAddGroup}>
@@ -535,7 +543,7 @@ export const CoursesListPage: React.FC = () => {
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    onClick={() => handleRemoveGroup(g.id)}
+                                    onClick={() => handleRemoveGroup(g.code)}
                                     disabled={groupsProcessing}
                                 >
                                     Удалить
@@ -547,19 +555,19 @@ export const CoursesListPage: React.FC = () => {
                     <div className={styles.selectorRow}>
                         <select
                             className={styles.groupsSelect}
-                            value={groupToAddId}
-                            onChange={e => setGroupToAddId(e.target.value)}
+                            value={groupToAddCode}
+                            onChange={e => setGroupToAddCode(e.target.value)}
                         >
                             <option value="">Выберите группу…</option>
                             {availableGroups.map(g => (
-                                <option key={g.id} value={g.id}>
+                                <option key={g.id} value={g.code}>
                                     {g.name} ({g.code})
                                 </option>
                             ))}
                         </select>
                         <Button
                             type="submit"
-                            disabled={!groupToAddId || groupsProcessing}
+                            disabled={!groupToAddCode || groupsProcessing}
                         >
                             Добавить группу
                         </Button>
@@ -572,8 +580,8 @@ export const CoursesListPage: React.FC = () => {
                     <p className={styles.groupsHint}>
                         Привязка групп влияет на генерацию расписания (какие группы
                         ходят на конкретный курс). В CSV используется колонка{' '}
-                        <code>groupIds</code> — список UUID групп, разделённых точкой с
-                        запятой.
+                        <code>groupCodes</code> — список кодов групп, разделённых
+                        точкой с запятой.
                     </p>
                 </form>
             )}
@@ -581,10 +589,10 @@ export const CoursesListPage: React.FC = () => {
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Код курса">
-                        <Input value={code} onChange={e => setCode(e.target.value)}/>
+                        <Input value={code} onChange={e => setCode(e.target.value)} />
                     </FormField>
                     <FormField label="Название">
-                        <Input value={title} onChange={e => setTitle(e.target.value)}/>
+                        <Input value={title} onChange={e => setTitle(e.target.value)} />
                     </FormField>
                     <FormField label="Преподаватель ID">
                         <Input
@@ -714,7 +722,7 @@ export const CoursesListPage: React.FC = () => {
                             <td>{c.teacherId}</td>
                             <td>{c.plannedHours}</td>
                             <td>{c.requiredRoomCapacity}</td>
-                            <td>{c.groupIds.length}</td>
+                            <td>{c.groupCodes.length}</td>
                             <td>
                                 <span
                                     className={styles.itemsSummary}

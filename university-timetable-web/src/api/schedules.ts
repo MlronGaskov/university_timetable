@@ -6,9 +6,9 @@ import type {
 import type {UUID} from '@/types/common';
 
 export const schedulesApi = {
-    getForSemester(semesterId: UUID) {
+    getForSemester(semesterCode: string) {
         return http<ScheduleSummaryResponse[]>(
-            `/api/semesters/${semesterId}/schedules`,
+            `/api/semesters/${semesterCode}/schedules`,
         );
     },
 
@@ -16,9 +16,9 @@ export const schedulesApi = {
         return http<ScheduleResponse>(`/api/schedules/${scheduleId}`);
     },
 
-    generateForSemester(semesterId: UUID) {
+    generateForSemester(semesterCode: string) {
         return http<ScheduleResponse>(
-            `/api/semesters/${semesterId}/schedules/generate`,
+            `/api/semesters/${semesterCode}/schedules/generate`,
             {
                 method: 'POST',
             },

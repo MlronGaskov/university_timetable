@@ -14,6 +14,6 @@ public record GroupResponse(
         Status status,
         Instant createdAt,
         Instant updatedAt,
-        List<UUID> studentIds
+        List<String> studentIds
 ) {
 }

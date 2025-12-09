@@ -263,6 +263,7 @@ export const SemestersListPage: React.FC = () => {
                         .forEach(v => roomCodes.push(v));
                 }
             }
+            console.log(courseCodes, policyName);
 
             rows.push({
                 code: safe(idxCode),
@@ -487,7 +488,7 @@ export const SemestersListPage: React.FC = () => {
                             <td>{s.roomCodes?.length ?? 0}</td>
                             <td>{s.status}</td>
                             <td>
-                                <Link to={`/semesters/${s.id}/schedules`}>Открыть</Link>
+                                <Link to={`/semesters/${s.code}/schedules`}>Открыть</Link>
                             </td>
                             <td>{formatInstant(s.updatedAt)}</td>
                             {isAdmin && (

@@ -25,6 +25,32 @@ interface CsvRow {
     rowNumber: number;
 }
 
+const splitCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+
+        if (ch === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+    result.push(current);
+    return result;
+};
+
 export const PoliciesListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
 
@@ -149,7 +175,7 @@ export const PoliciesListPage: React.FC = () => {
         const lines = text.trim().split(/\r?\n/);
         if (lines.length < 2) return [];
 
-        const header = lines[0].split(',').map(h => h.trim());
+        const header = splitCsvLine(lines[0]).map(h => h.trim());
         const idx = (name: string) => header.indexOf(name);
 
         const idxName = idx('name');
@@ -176,8 +202,7 @@ export const PoliciesListPage: React.FC = () => {
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
-            const parts = line.split(',');
-
+            const parts = splitCsvLine(line);
             const safe = (idx: number) => (parts[idx] ?? '').trim();
 
             rows.push({

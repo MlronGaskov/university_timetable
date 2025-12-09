@@ -39,13 +39,13 @@ export const groupsApi = {
         });
     },
 
-    addStudent(groupId: UUID, studentId: UUID) {
+    addStudent(groupId: UUID, studentId: string) {
         return http<GroupResponse>(`${BASE_PATH}/${groupId}/students/${studentId}`, {
             method: 'POST',
         });
     },
 
-    removeStudent(groupId: UUID, studentId: UUID) {
+    removeStudent(groupId: UUID, studentId: string) {
         return http<GroupResponse>(`${BASE_PATH}/${groupId}/students/${studentId}`, {
             method: 'DELETE',
         });

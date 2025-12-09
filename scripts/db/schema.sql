@@ -38,13 +38,13 @@ CREATE TABLE IF NOT EXISTS groups
 
 CREATE TABLE IF NOT EXISTS group_students
 (
-    group_id   UUID NOT NULL,
-    student_id UUID NOT NULL,
+    group_id   UUID        NOT NULL,
+    student_id VARCHAR(64) NOT NULL,
     PRIMARY KEY (group_id, student_id),
     CONSTRAINT fk_group_students_group
         FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_students_student
-        FOREIGN KEY (student_id) REFERENCES students (id)
+        FOREIGN KEY (student_id) REFERENCES students (student_id)
 );
 
 CREATE TABLE IF NOT EXISTS rooms
@@ -140,13 +140,13 @@ CREATE TABLE IF NOT EXISTS courses
 
 CREATE TABLE IF NOT EXISTS course_groups
 (
-    course_id UUID NOT NULL,
-    group_id  UUID NOT NULL,
-    PRIMARY KEY (course_id, group_id),
+    course_id  UUID        NOT NULL,
+    group_code VARCHAR(64) NOT NULL,
+    PRIMARY KEY (course_id, group_code),
     CONSTRAINT fk_course_groups_course
         FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE,
     CONSTRAINT fk_course_groups_group
-        FOREIGN KEY (group_id) REFERENCES groups (id)
+        FOREIGN KEY (group_code) REFERENCES groups (code)
 );
 
 CREATE TABLE IF NOT EXISTS course_items

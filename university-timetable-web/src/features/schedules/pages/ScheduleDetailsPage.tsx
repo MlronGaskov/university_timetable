@@ -99,8 +99,8 @@ export const ScheduleDetailsPage: React.FC = () => {
                     roomsApi.getAll(),
                 ]);
 
-                const courseIds = new Set(schedule.slots.map(s => s.courseId));
-                const filteredCourses = allCourses.filter(c => courseIds.has(c.id));
+                const courseCodes = new Set(schedule.slots.map(s => s.courseCode));
+                const filteredCourses = allCourses.filter(c => courseCodes.has(c.code));
 
                 setCourses(filteredCourses);
                 setTeachers(allTeachers);
@@ -118,13 +118,13 @@ export const ScheduleDetailsPage: React.FC = () => {
         if (!schedule) return [];
 
         return schedule.slots.map(slot => {
-            const course = courses.find(c => c.id === slot.courseId);
+            const course = courses.find(c => c.code === slot.courseCode);
             const teacher = course
                 ? teachers.find(t => t.teacherId === course.teacherId)
                 : undefined;
 
             const courseGroups: GroupResponse[] = course
-                ? groups.filter(g => course.groupIds.includes(g.id))
+                ? groups.filter(g => course.groupCodes.includes(g.id))
                 : [];
 
             const room = rooms.find(r => r.roomCode === slot.roomCode);
@@ -281,10 +281,10 @@ export const ScheduleDetailsPage: React.FC = () => {
         >
             {schedule && (
                 <p className={styles.infoLine}>
-                    Семестр ID: <code>{schedule.semesterId}</code> | Версия:{' '}
+                    Семестр: <code>{schedule.semesterCode}</code> | Версия:{' '}
                     {schedule.version} | Оценка:{' '}
                     {schedule.evaluationScore ?? '—'} |{' '}
-                    <Link to={`/semesters/${schedule.semesterId}/schedules`}>
+                    <Link to={`/semesters/${schedule.semesterCode}/schedules`}>
                         Все версии семестра
                     </Link>
                 </p>

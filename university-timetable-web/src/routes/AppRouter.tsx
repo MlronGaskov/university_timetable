@@ -16,13 +16,8 @@ import {UsersListPage} from '@/features/users/pages/UsersListPage';
 import {PoliciesListPage} from '@/features/policies/pages/PoliciesListPage';
 import {SemesterSchedulesPage} from '@/features/schedules/pages/SemesterSchedulesPage';
 import {ScheduleDetailsPage} from '@/features/schedules/pages/ScheduleDetailsPage';
-import {useRoleGuard} from '@/hooks/useRoleGuard';
 
 const HomeRedirect: React.FC = () => {
-    const {isAdmin, isTeacher, isStudent} = useRoleGuard();
-    if (isAdmin) return <Navigate to="/admin" replace/>;
-    if (isTeacher) return <Navigate to="/teacher" replace/>;
-    if (isStudent) return <Navigate to="/student" replace/>;
     return <Navigate to="/profile" replace/>;
 };
 
@@ -46,7 +41,7 @@ export const AppRouter: React.FC = () => {
                     <Route path="/students" element={<StudentsListPage/>}/>
                     <Route path="/policies" element={<PoliciesListPage/>}/>
 
-                    <Route path="/semesters/:semesterId/schedules" element={<SemesterSchedulesPage/>}/>
+                    <Route path="/semesters/:semesterCode/schedules" element={<SemesterSchedulesPage/>}/>
                     <Route path="/schedules/:scheduleId" element={<ScheduleDetailsPage/>}/>
 
                     <Route element={<RoleRoute allowed={['ADMIN']}/>}>

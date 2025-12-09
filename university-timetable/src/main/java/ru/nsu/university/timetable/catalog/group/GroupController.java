@@ -55,14 +55,14 @@ public class GroupController {
     @PostMapping("/{groupId}/students/{studentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public GroupResponse addStudent(@PathVariable UUID groupId,
-                                    @PathVariable UUID studentId) {
+                                    @PathVariable String studentId) {
         return service.addStudent(groupId, studentId);
     }
 
     @DeleteMapping("/{groupId}/students/{studentId}")
     @PreAuthorize("hasRole('ADMIN')")
     public GroupResponse removeStudent(@PathVariable UUID groupId,
-                                       @PathVariable UUID studentId) {
+                                       @PathVariable String studentId) {
         return service.removeStudent(groupId, studentId);
     }
 }

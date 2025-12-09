@@ -47,9 +47,8 @@ export const GroupsListPage: React.FC = () => {
     const [csvResult, setCsvResult] = useState<string | null>(null);
     const [csvProcessing, setCsvProcessing] = useState(false);
 
-    // управление студентами в группе
     const [studentsGroupId, setStudentsGroupId] = useState<string | null>(null);
-    const [studentToAddId, setStudentToAddId] = useState('');
+    const [studentToAddStudentId, setStudentToAddStudentId] = useState('');
     const [studentsError, setStudentsError] = useState<string | null>(null);
     const [studentsProcessing, setStudentsProcessing] = useState(false);
 
@@ -161,48 +160,52 @@ export const GroupsListPage: React.FC = () => {
         }
     };
 
-    // ---- работа со студентами в группе ----
-
     const currentGroup = useMemo(
-        () => (studentsGroupId ? items.find(g => g.id === studentsGroupId) ?? null : null),
+        () =>
+            studentsGroupId
+                ? items.find(g => g.id === studentsGroupId) ?? null
+                : null,
         [studentsGroupId, items],
     );
 
     const currentGroupStudents: StudentResponse[] = useMemo(() => {
         if (!currentGroup) return [];
         const ids = new Set(currentGroup.studentIds);
-        return allStudents.filter(s => ids.has(s.id));
+        return allStudents.filter(s => ids.has(s.studentId));
     }, [currentGroup, allStudents]);
 
     const availableStudents: StudentResponse[] = useMemo(() => {
         if (!currentGroup) return [];
         const ids = new Set(currentGroup.studentIds);
-        return allStudents.filter(s => !ids.has(s.id));
+        return allStudents.filter(s => !ids.has(s.studentId));
     }, [currentGroup, allStudents]);
 
     const openStudentsForm = (g: GroupResponse) => {
         if (!isAdmin) return;
         setStudentsGroupId(g.id);
         setStudentsError(null);
-        setStudentToAddId('');
+        setStudentToAddStudentId('');
     };
 
     const closeStudentsForm = () => {
         setStudentsGroupId(null);
         setStudentsError(null);
-        setStudentToAddId('');
+        setStudentToAddStudentId('');
     };
 
     const handleAddStudent: React.FormEventHandler = async e => {
         e.preventDefault();
-        if (!isAdmin || !studentsGroupId || !studentToAddId) return;
+        if (!isAdmin || !studentsGroupId || !studentToAddStudentId) return;
 
         setStudentsProcessing(true);
         setStudentsError(null);
         try {
-            const updated = await groupsApi.addStudent(studentsGroupId, studentToAddId);
+            const updated = await groupsApi.addStudent(
+                studentsGroupId,
+                studentToAddStudentId,
+            );
             setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
-            setStudentToAddId('');
+            setStudentToAddStudentId('');
         } catch (err) {
             console.error(err);
             setStudentsError('Не удалось добавить студента в группу');
@@ -226,17 +229,17 @@ export const GroupsListPage: React.FC = () => {
         }
     };
 
-    // ---- CSV ----
-    // Формат:
-    // name,code,size,studentIds
-    // Группа 101,GRP-101,30,uuid1;uuid2;uuid3
-
     const parseCsv = (text: string): CsvRow[] => {
         const lines = text.trim().split(/\r?\n/);
         if (lines.length < 2) return [];
 
         const header = lines[0].split(',').map(h => h.trim());
-        if (header.length < 3 || header[0] !== 'name' || header[1] !== 'code' || header[2] !== 'size') {
+        if (
+            header.length < 3 ||
+            header[0] !== 'name' ||
+            header[1] !== 'code' ||
+            header[2] !== 'size'
+        ) {
             throw new Error(
                 'Ожидаются колонки как минимум: name,code,size[,studentIds]',
             );
@@ -259,7 +262,6 @@ export const GroupsListPage: React.FC = () => {
             if (idxStudentIds >= 0) {
                 const raw = (parts[idxStudentIds] ?? '').trim();
                 if (raw) {
-                    // ожидаем список uuid, разделённых `;`
                     studentIds = raw
                         .split(';')
                         .map(s => s.trim())
@@ -298,7 +300,12 @@ export const GroupsListPage: React.FC = () => {
             const errors: string[] = [];
 
             for (const row of rows) {
-                if (!row.name || !row.code || !Number.isFinite(row.size) || row.size <= 0) {
+                if (
+                    !row.name ||
+                    !row.code ||
+                    !Number.isFinite(row.size) ||
+                    row.size <= 0
+                ) {
                     errors.push(
                         `Строка ${row.rowNumber}: не заполнены name/code или некорректный size`,
                     );
@@ -312,7 +319,6 @@ export const GroupsListPage: React.FC = () => {
                         size: row.size,
                     });
 
-                    // добавляем студентов, если указаны
                     if (row.studentIds && row.studentIds.length > 0) {
                         let current = created;
                         for (const sid of row.studentIds) {
@@ -325,7 +331,6 @@ export const GroupsListPage: React.FC = () => {
                                 );
                             }
                         }
-                        // кладём финальное состояние группы
                         setItems(prev => [...prev, current]);
                     } else {
                         setItems(prev => [...prev, created]);
@@ -370,7 +375,6 @@ export const GroupsListPage: React.FC = () => {
                 g.status,
                 g.createdAt,
                 g.updatedAt,
-                // список ID студентов через `;`
                 g.studentIds.join(';'),
             ]),
         );
@@ -391,7 +395,6 @@ export const GroupsListPage: React.FC = () => {
         <Page title="Группы" actions={actions}>
             <CsvMessages error={csvError} result={csvResult} />
 
-            {/* Панель управления студентами в выбранной группе */}
             {isAdmin && studentsGroupId && currentGroup && (
                 <form className={styles.studentsForm} onSubmit={handleAddStudent}>
                     <div className={styles.studentsHeader}>
@@ -422,7 +425,7 @@ export const GroupsListPage: React.FC = () => {
                                 <Button
                                     type="button"
                                     variant="ghost"
-                                    onClick={() => handleRemoveStudent(s.id)}
+                                    onClick={() => handleRemoveStudent(s.studentId)}
                                     disabled={studentsProcessing}
                                 >
                                     Удалить
@@ -434,19 +437,19 @@ export const GroupsListPage: React.FC = () => {
                     <div className={styles.selectorRow}>
                         <select
                             className={styles.studentsSelect}
-                            value={studentToAddId}
-                            onChange={e => setStudentToAddId(e.target.value)}
+                            value={studentToAddStudentId}
+                            onChange={e => setStudentToAddStudentId(e.target.value)}
                         >
                             <option value="">Выберите студента…</option>
                             {availableStudents.map(s => (
-                                <option key={s.id} value={s.id}>
+                                <option key={s.id} value={s.studentId}>
                                     {s.fullName} ({s.studentId})
                                 </option>
                             ))}
                         </select>
                         <Button
                             type="submit"
-                            disabled={!studentToAddId || studentsProcessing}
+                            disabled={!studentToAddStudentId || studentsProcessing}
                         >
                             Добавить в группу
                         </Button>
@@ -459,8 +462,8 @@ export const GroupsListPage: React.FC = () => {
                     <p className={styles.studentsHint}>
                         Список возможных студентов берётся из справочника «Студенты».
                         Для CSV-экспорта используется колонка <code>studentIds</code> —
-                        список внутренних ID студентов (UUID), разделённых точкой с
-                        запятой.
+                        список полей <code>studentId</code> студентов, разделённых
+                        точкой с запятой.
                     </p>
                 </form>
             )}

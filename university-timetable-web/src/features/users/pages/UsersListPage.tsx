@@ -124,14 +124,32 @@ export const UsersListPage: React.FC = () => {
                     setLastTempLogin(res.user.login);
                 }
             } else if (formMode === 'edit' && editingId) {
-                const body = {
+                const updated = await usersApi.update(editingId, {
                     email: email.trim(),
                     role,
                     teacherId: teacherId.trim() || null,
                     studentId: studentId.trim() || null,
-                };
-                const updated = await usersApi.update(editingId, body);
+                });
+
                 setItems(prev => prev.map(u => (u.id === updated.id ? updated : u)));
+
+                const newPassword = password.trim();
+                if (newPassword) {
+                    try {
+                        const updatedWithPassword = await usersApi.setPassword(editingId, {
+                            newPassword: newPassword,
+                        });
+                        setItems(prev =>
+                            prev.map(u =>
+                                u.id === updatedWithPassword.id ? updatedWithPassword : u,
+                            ),
+                        );
+                    } catch (err) {
+                        console.error(err);
+                        setFormError('Пользователь обновлён, но пароль не удалось изменить');
+                        return;
+                    }
+                }
             }
             resetForm();
         } catch (err) {
@@ -163,8 +181,6 @@ export const UsersListPage: React.FC = () => {
             alert('Не удалось активировать пользователя');
         }
     };
-
-    // ---- CSV ----
 
     const parseCsv = (text: string): CsvRow[] => {
         const lines = text.trim().split(/\r?\n/);

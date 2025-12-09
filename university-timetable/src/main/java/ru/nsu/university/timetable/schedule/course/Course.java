@@ -45,15 +45,16 @@ public class Course {
             name = "course_groups",
             joinColumns = @JoinColumn(name = "course_id")
     )
-    @Column(name = "group_id", nullable = false)
+    @Column(name = "group_code", nullable = false, length = 64)
     @Builder.Default
-    private List<UUID> groupIds = new ArrayList<>();
+    private List<String> groupCodes = new ArrayList<>();
 
     @ElementCollection
     @CollectionTable(
             name = "course_items",
             joinColumns = @JoinColumn(name = "course_id")
     )
+    @Column(name = "item_name", nullable = false)
     @Builder.Default
     private List<EquipmentRequirement> equipmentRequirements = new ArrayList<>();
 
@@ -80,6 +81,9 @@ public class Course {
         }
         if (title != null) {
             title = title.trim();
+        }
+        if (groupCodes != null) {
+            groupCodes.replaceAll(c -> c == null ? null : c.trim());
         }
         if (equipmentRequirements != null) {
             for (EquipmentRequirement req : equipmentRequirements) {

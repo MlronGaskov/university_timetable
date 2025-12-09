@@ -39,14 +39,14 @@ export const coursesApi = {
         });
     },
 
-    addGroup(courseId: UUID, groupId: UUID) {
-        return http<CourseResponse>(`${BASE_PATH}/${courseId}/groups/${groupId}`, {
+    addGroup(courseId: UUID, groupCode: string) {
+        return http<CourseResponse>(`${BASE_PATH}/${courseId}/groups/${groupCode}`, {
             method: 'POST',
         });
     },
 
-    removeGroup(courseId: UUID, groupId: UUID) {
-        return http<CourseResponse>(`${BASE_PATH}/${courseId}/groups/${groupId}`, {
+    removeGroup(courseId: UUID, groupCode: string) {
+        return http<CourseResponse>(`${BASE_PATH}/${courseId}/groups/${groupCode}`, {
             method: 'DELETE',
         });
     },

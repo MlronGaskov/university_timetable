@@ -35,9 +35,10 @@ public class CourseService {
             throw new IllegalArgumentException("Teacher not found: " + req.teacherId());
         }
 
-        for (UUID groupId : req.groupIds()) {
-            if (!groupRepository.existsById(groupId)) {
-                throw new IllegalArgumentException("Group not found: " + groupId);
+        List<String> normalizedGroupCodes = normalizeGroupCodes(req.groupCodes());
+        for (String groupCode : normalizedGroupCodes) {
+            if (!groupRepository.existsByCodeIgnoreCase(groupCode)) {
+                throw new IllegalArgumentException("Group not found: " + groupCode);
             }
         }
 
@@ -47,7 +48,7 @@ public class CourseService {
                 .teacherId(req.teacherId().trim())
                 .plannedHours(req.plannedHours())
                 .status(Status.ACTIVE)
-                .groupIds(new ArrayList<>(req.groupIds()))
+                .groupCodes(new ArrayList<>(normalizedGroupCodes))
                 .equipmentRequirements(mapItems(req.equipmentRequirements()))
                 .build();
 
@@ -96,13 +97,14 @@ public class CourseService {
             course.setPlannedHours(req.plannedHours());
         }
 
-        if (req.groupIds() != null) {
-            for (UUID groupId : req.groupIds()) {
-                if (!groupRepository.existsById(groupId)) {
-                    throw new IllegalArgumentException("Group not found: " + groupId);
+        if (req.groupCodes() != null) {
+            List<String> normalizedGroupCodes = normalizeGroupCodes(req.groupCodes());
+            for (String groupCode : normalizedGroupCodes) {
+                if (!groupRepository.existsByCodeIgnoreCase(groupCode)) {
+                    throw new IllegalArgumentException("Group not found: " + groupCode);
                 }
             }
-            course.setGroupIds(new ArrayList<>(req.groupIds()));
+            course.setGroupCodes(new ArrayList<>(normalizedGroupCodes));
         }
 
         if (req.equipmentRequirements() != null) {
@@ -128,26 +130,34 @@ public class CourseService {
         return map(course);
     }
 
-    public CourseResponse addGroup(UUID courseId, UUID groupId) {
+    public CourseResponse addGroup(UUID courseId, String groupCode) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
 
-        if (!groupRepository.existsById(groupId)) {
-            throw new IllegalArgumentException("Group not found: " + groupId);
+        if (groupCode == null || groupCode.isBlank()) {
+            throw new IllegalArgumentException("groupCode must not be blank");
+        }
+        String normalized = groupCode.trim();
+
+        if (!groupRepository.existsByCodeIgnoreCase(normalized)) {
+            throw new IllegalArgumentException("Group not found: " + normalized);
         }
 
-        if (!course.getGroupIds().contains(groupId)) {
-            course.getGroupIds().add(groupId);
+        if (!course.getGroupCodes().contains(normalized)) {
+            course.getGroupCodes().add(normalized);
         }
 
         return map(course);
     }
 
-    public CourseResponse removeGroup(UUID courseId, UUID groupId) {
+    public CourseResponse removeGroup(UUID courseId, String groupCode) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
 
-        course.getGroupIds().remove(groupId);
+        if (groupCode != null && !groupCode.isBlank()) {
+            String normalized = groupCode.trim();
+            course.getGroupCodes().remove(normalized);
+        }
 
         return map(course);
     }
@@ -186,7 +196,7 @@ public class CourseService {
                 c.getPlannedHours(),
                 calculateRequiredRoomCapacity(c),
                 c.getTeacherId(),
-                List.copyOf(c.getGroupIds()),
+                List.copyOf(c.getGroupCodes()),
                 items,
                 c.getCreatedAt(),
                 c.getUpdatedAt()
@@ -194,14 +204,29 @@ public class CourseService {
     }
 
     private int calculateRequiredRoomCapacity(Course course) {
-        if (course.getGroupIds() == null || course.getGroupIds().isEmpty()) {
+        if (course.getGroupCodes() == null || course.getGroupCodes().isEmpty()) {
             return 0;
         }
 
-        int totalSize = groupRepository.findAllById(course.getGroupIds()).stream()
+        List<Group> groups = groupRepository.findByCodeIn(course.getGroupCodes());
+
+        int totalSize = groups.stream()
                 .mapToInt(Group::getSize)
                 .sum();
 
         return totalSize + 5;
+    }
+
+    private List<String> normalizeGroupCodes(List<String> list) {
+        if (list == null) return new ArrayList<>();
+        List<String> res = new ArrayList<>();
+        for (String v : list) {
+            if (v == null) continue;
+            String trimmed = v.trim();
+            if (!trimmed.isEmpty()) {
+                res.add(trimmed);
+            }
+        }
+        return res;
     }
 }

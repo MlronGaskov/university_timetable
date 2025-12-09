@@ -14,7 +14,7 @@ public record CourseResponse(
         int plannedHours,
         int requiredRoomCapacity,
         String teacherId,
-        List<UUID> groupIds,
+        List<String> groupCodes,
         List<CourseEquipmentItemDto> equipmentRequirements,
         Instant createdAt,
         Instant updatedAt
