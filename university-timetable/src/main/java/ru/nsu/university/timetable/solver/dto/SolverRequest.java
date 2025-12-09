@@ -23,7 +23,8 @@ public record SolverRequest(
             String teacherId,
             List<String> groupCodes,
             int plannedHours,
-            int requiredRoomCapacity
+            int requiredRoomCapacity,
+            List<EquipmentRequirementDto> equipmentRequirements
     ) {
     }
 
@@ -50,6 +51,12 @@ public record SolverRequest(
             String day,
             String startTime,
             String endTime
+    ) {
+    }
+
+    public record EquipmentRequirementDto(
+            String name,
+            int quantity
     ) {
     }
 
