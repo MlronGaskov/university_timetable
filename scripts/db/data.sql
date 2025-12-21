@@ -45,7 +45,7 @@ ON CONFLICT (code) DO NOTHING;
 INSERT INTO policies (name, grid_json, breaks_json, limits_json, travel_matrix_json, weights_json, created_at, updated_at)
 VALUES (
     'default-policy',
-    '{}',
+    '{"days":["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"],"slots":[{"start":"09:00","end":"10:35"},{"start":"10:50","end":"12:25"},{"start":"12:40","end":"14:15"},{"start":"14:30","end":"16:05"},{"start":"16:20","end":"17:55"}],"weekPattern":"EVERY_WEEK"}',
     '[]',
     '{}',
     '{}',
@@ -55,18 +55,53 @@ VALUES (
 )
 ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO courses (code, title, teacher_id, planned_hours, status, created_at, updated_at)
+INSERT INTO courses (code, title, teacher_id, planned_hours, required_room_capacity, status, created_at, updated_at)
 VALUES
-    ('ALG',   'Алгоритмы и структуры данных',         'IVANOV_AS',    4, 'ACTIVE', now(), now()),
-    ('ALG-P', 'Практикум по алгоритмам',              'SMIRNOVA_EV',  2, 'ACTIVE', now(), now()),
-    ('LA',    'Линейная алгебра',                     'PETROVA_MV',   4, 'ACTIVE', now(), now()),
-    ('LA-P',  'Семинар по линейной алгебре',          'PETROVA_MV',   2, 'ACTIVE', now(), now()),
-    ('PROG-C','Программирование на C',                'SIDOROV_IP',   4, 'ACTIVE', now(), now()),
-    ('OS',    'Операционные системы',                 'KUZNETSOV_DA', 4, 'ACTIVE', now(), now()),
-    ('OS-L',  'Лабораторный практикум по ОС',         'KUZNETSOV_DA', 2, 'ACTIVE', now(), now()),
-    ('ML',    'Введение в машинное обучение',         'VOLKOVA_OA',   4, 'ACTIVE', now(), now()),
-    ('ML-P',  'Практикум по машинному обучению',      'VOLKOVA_OA',   2, 'ACTIVE', now(), now())
+    ('ALG',   'Алгоритмы и структуры данных',         'IVANOV_AS',    4, 31, 'ACTIVE', now(), now()),
+    ('ALG-P', 'Практикум по алгоритмам',              'SMIRNOVA_EV',  2, 31, 'ACTIVE', now(), now()),
+    ('LA',    'Линейная алгебра',                     'PETROVA_MV',   4, 31, 'ACTIVE', now(), now()),
+    ('LA-P',  'Семинар по линейной алгебре',          'PETROVA_MV',   2, 31, 'ACTIVE', now(), now()),
+    ('PROG-C','Программирование на C',                'SIDOROV_IP',   4, 31, 'ACTIVE', now(), now()),
+    ('OS',    'Операционные системы',                 'KUZNETSOV_DA', 4, 59, 'ACTIVE', now(), now()),
+    ('OS-L',  'Лабораторный практикум по ОС',         'KUZNETSOV_DA', 2, 59, 'ACTIVE', now(), now()),
+    ('ML',    'Введение в машинное обучение',         'VOLKOVA_OA',   4, 54, 'ACTIVE', now(), now()),
+    ('ML-P',  'Практикум по машинному обучению',      'VOLKOVA_OA',   2, 54, 'ACTIVE', now(), now())
 ON CONFLICT (code) DO NOTHING;
+
+-- Добавляем рабочие часы преподавателей
+INSERT INTO teacher_working_hours (teacher_id_fk, day_of_week, start_time, end_time)
+SELECT t.id, 'MONDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'IVANOV_AS'
+UNION ALL
+SELECT t.id, 'WEDNESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'IVANOV_AS'
+UNION ALL
+SELECT t.id, 'FRIDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'IVANOV_AS'
+UNION ALL
+SELECT t.id, 'MONDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'PETROVA_MV'
+UNION ALL
+SELECT t.id, 'TUESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'PETROVA_MV'
+UNION ALL
+SELECT t.id, 'THURSDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'PETROVA_MV'
+UNION ALL
+SELECT t.id, 'MONDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'SIDOROV_IP'
+UNION ALL
+SELECT t.id, 'TUESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'SIDOROV_IP'
+UNION ALL
+SELECT t.id, 'FRIDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'SIDOROV_IP'
+UNION ALL
+SELECT t.id, 'TUESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'KUZNETSOV_DA'
+UNION ALL
+SELECT t.id, 'WEDNESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'KUZNETSOV_DA'
+UNION ALL
+SELECT t.id, 'FRIDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'KUZNETSOV_DA'
+UNION ALL
+SELECT t.id, 'WEDNESDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'VOLKOVA_OA'
+UNION ALL
+SELECT t.id, 'THURSDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'VOLKOVA_OA'
+UNION ALL
+SELECT t.id, 'MONDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'SMIRNOVA_EV'
+UNION ALL
+SELECT t.id, 'THURSDAY', '09:00'::time, '18:00'::time FROM teachers t WHERE t.teacher_id = 'SMIRNOVA_EV'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO course_groups (course_id, group_code)
 SELECT c.id, g.code

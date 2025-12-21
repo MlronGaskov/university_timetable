@@ -112,10 +112,10 @@ CREATE TABLE IF NOT EXISTS users
 
 CREATE TABLE IF NOT EXISTS teacher_working_hours
 (
-    teacher_id_fk UUID     NOT NULL,
-    day_of_week   SMALLINT NOT NULL,
-    start_time    TIME     NOT NULL,
-    end_time      TIME     NOT NULL,
+    teacher_id_fk UUID        NOT NULL,
+    day_of_week   VARCHAR(10) NOT NULL,
+    start_time    TIME        NOT NULL,
+    end_time      TIME        NOT NULL,
     PRIMARY KEY (teacher_id_fk, day_of_week, start_time),
     CONSTRAINT fk_teacher_working_hours_teacher
         FOREIGN KEY (teacher_id_fk) REFERENCES teachers (id) ON DELETE CASCADE
@@ -123,14 +123,15 @@ CREATE TABLE IF NOT EXISTS teacher_working_hours
 
 CREATE TABLE IF NOT EXISTS courses
 (
-    id            UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
-    code          VARCHAR(64)  NOT NULL,
-    title         VARCHAR(256) NOT NULL,
-    teacher_id    VARCHAR(64)  NOT NULL,
-    planned_hours INTEGER      NOT NULL,
-    status        VARCHAR(16)  NOT NULL,
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    id                     UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    code                   VARCHAR(64)  NOT NULL,
+    title                  VARCHAR(256) NOT NULL,
+    teacher_id             VARCHAR(64)  NOT NULL,
+    planned_hours          INTEGER      NOT NULL,
+    required_room_capacity INTEGER      NOT NULL DEFAULT 0,
+    status                 VARCHAR(16)  NOT NULL,
+    created_at             TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at             TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
     CONSTRAINT uk_courses_code UNIQUE (code),
 

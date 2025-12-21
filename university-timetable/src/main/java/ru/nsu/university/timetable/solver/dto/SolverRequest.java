@@ -11,17 +11,17 @@ public record SolverRequest(
         PolicyDto policy
 ) {
     public record SemesterDto(
-            String code,
+            String id,
             Instant startAt,
             Instant endAt,
-            String policyName
+            String policyId
     ) {
     }
 
     public record CourseDto(
-            String code,
+            String id,
             String teacherId,
-            List<String> groupCodes,
+            List<String> groupIds,
             int plannedHours,
             int requiredRoomCapacity,
             List<EquipmentRequirementDto> equipmentRequirements
@@ -61,7 +61,7 @@ public record SolverRequest(
     }
 
     public record PolicyDto(
-            String name,
+            String id,
             String gridJson,
             String breaksJson,
             String limitsJson,

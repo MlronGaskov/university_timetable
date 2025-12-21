@@ -9,7 +9,7 @@ public record SolverResponse(
         Double evaluationScore
 ) {
     public record SlotDto(
-            String courseCode,
+            String courseId,
             String roomCode,
             String dayOfWeek,
             String startTime,

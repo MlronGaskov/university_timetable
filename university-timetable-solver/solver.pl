@@ -79,14 +79,13 @@ instant_date(InstantAtom, DateString) :-
 parse_grid(GridJsonAtom, GridDict) :-
     ensure_string(GridJsonAtom, GridJsonString),
     atom_string(GridAtom, GridJsonString),
-    catch(
-        atom_json_dict(GridAtom, GridDict, []),
-        _,
-        default_grid(GridDict)
-    ),
-    (GridDict = _{slots: Slots, days: Days} ->
-        (is_list(Slots), is_list(Days) -> true ; default_grid(GridDict))
-    ;   default_grid(GridDict)
+    ( catch(atom_json_dict(GridAtom, ParsedDict, []), _, fail),
+      get_dict(slots, ParsedDict, Slots),
+      get_dict(days, ParsedDict, Days),
+      is_list(Slots),
+      is_list(Days)
+    -> GridDict = ParsedDict
+    ;  default_grid(GridDict)
     ).
 
 default_grid(_{
@@ -105,23 +104,29 @@ default_grid(_{
 slots_from_grid(Grid, Slots) :-
     get_dict(days, Grid, Days),
     get_dict(slots, Grid, TimeSlots),
-    (get_dict(weekPattern, Grid, Week) -> WeekPattern = Week ; WeekPattern = "EVERY_WEEK"),
-    findall(slot(Day, Start, End, WeekPattern),
-            (member(Day, Days), member(S, TimeSlots), get_dict(start, S, Start), get_dict(end, S, End)),
+    length(Days, NumDays),
+    length(TimeSlots, NumSlots),
+    % Generate slots with day distribution priority
+    % First all days with EVERY_WEEK, then ODD/EVEN as fallback
+    findall(slot(Day, Start, End, Pattern),
+            (member(S, TimeSlots), 
+             get_dict(start, S, Start), 
+             get_dict(end, S, End),
+             member(Day, Days),
+             member(Pattern, ["EVERY_WEEK", "ODD_WEEKS", "EVEN_WEEKS"])),
             Slots).
 
 expand_courses_by_hours([], []).
 expand_courses_by_hours([Course|Rest], Expanded) :-
     Planned = Course.plannedHours,
-    slot_length_minutes(Course, SlotMinutes),
-    RequiredSlotsF is (Planned * 60) / SlotMinutes,
+    % plannedHours is in academic hours (45 min each)
+    % 1 pair = 2 academic hours = 90 min
+    % So RequiredSlots = plannedHours / 2
+    RequiredSlotsF is Planned / 2,
     RequiredSlots is max(1, ceiling(RequiredSlotsF)),
     findall(Course, between(1, RequiredSlots, _), Copies),
     expand_courses_by_hours(Rest, TailExpanded),
     append(Copies, TailExpanded, Expanded).
-
-slot_length_minutes(_Course, Minutes) :-
-    Minutes is 90.
 
 teacher_map(List, Map) :-
     findall(Id-Teacher,
@@ -196,11 +201,11 @@ sum_qty(item(_, Q), Acc, New) :- New is Acc + Q.
 
 choose_slot(SlotTemplates, TeacherMap, TeacherId, GroupIds, Room, Existing, Slot) :-
     member(Slot, SlotTemplates),
-    Slot = slot(Day, Start, End, _),
+    Slot = slot(Day, Start, End, WeekPattern),
     time_minutes(Start, StartM),
     time_minutes(End, EndM),
     teacher_ok(TeacherMap, TeacherId, Day, StartM, EndM),
-    no_conflicts(Existing, Room, TeacherId, GroupIds, Day, StartM, EndM).
+    no_conflicts(Existing, Room, TeacherId, GroupIds, Day, StartM, EndM, WeekPattern).
 
 teacher_ok(TeacherMap, TeacherId, Day, StartM, EndM) :-
     ( member(TeacherId-Teacher, TeacherMap)
@@ -224,8 +229,8 @@ teacher_ok(TeacherMap, TeacherId, _, _, _) :-
     fail.
 teacher_ok(_, _, _, _, _).
 
-no_conflicts([], _, _, _, _, _, _).
-no_conflicts([S|Rest], Room, TeacherId, GroupIds, Day, StartM, EndM) :-
+no_conflicts([], _, _, _, _, _, _, _).
+no_conflicts([S|Rest], Room, TeacherId, GroupIds, Day, StartM, EndM, WeekPattern) :-
     get_dict(dayOfWeek, S, DayS),
     (DayS \== Day ->
         true
@@ -234,20 +239,26 @@ no_conflicts([S|Rest], Room, TeacherId, GroupIds, Day, StartM, EndM) :-
         time_minutes(S.endTime, SEnd),
         ( \+ times_overlap(StartM, EndM, SStart, SEnd)
         -> true
-        ;  get_dict(roomCode, S, RoomCode),
-           ensure_string(RoomCode, ExistingRoomCode),
-           get_dict(roomCode, Room, RoomCodeNewRaw),
-           ensure_string(RoomCodeNewRaw, RoomCodeNew),
-           ExistingRoomCode \== RoomCodeNew,
-           get_dict(teacherId, S, TId),
-           ensure_string(TId, ExistingTeacher),
-           ensure_string(TeacherId, TeacherIdStr),
-           ExistingTeacher \== TeacherIdStr,
-           get_dict(groups, S, ExistingGroups),
-           disjoint_groups(GroupIds, ExistingGroups)
+        ;  % Times overlap - check if week patterns allow coexistence
+           get_dict(weekPattern, S, ExistingPattern),
+           ( \+ week_patterns_conflict(WeekPattern, ExistingPattern)
+           -> true  % ODD vs EVEN - no conflict
+           ;  % Same week pattern or EVERY_WEEK involved - check other constraints
+              get_dict(roomCode, S, RoomCode),
+              ensure_string(RoomCode, ExistingRoomCode),
+              get_dict(roomCode, Room, RoomCodeNewRaw),
+              ensure_string(RoomCodeNewRaw, RoomCodeNew),
+              ExistingRoomCode \== RoomCodeNew,
+              get_dict(teacherId, S, TId),
+              ensure_string(TId, ExistingTeacher),
+              ensure_string(TeacherId, TeacherIdStr),
+              ExistingTeacher \== TeacherIdStr,
+              get_dict(groups, S, ExistingGroups),
+              disjoint_groups(GroupIds, ExistingGroups)
+           )
         )
     ),
-    no_conflicts(Rest, Room, TeacherId, GroupIds, Day, StartM, EndM).
+    no_conflicts(Rest, Room, TeacherId, GroupIds, Day, StartM, EndM, WeekPattern).
 
 disjoint_groups([], _).
 disjoint_groups([G|Rest], Groups) :-
@@ -257,6 +268,14 @@ disjoint_groups([G|Rest], Groups) :-
 times_overlap(Start1, End1, Start2, End2) :-
     Start1 < End2,
     Start2 < End1.
+
+% Check if two week patterns can coexist in the same time slot
+% ODD_WEEKS and EVEN_WEEKS don't conflict with each other
+week_patterns_conflict(P1, P2) :-
+    ensure_string(P1, Pattern1),
+    ensure_string(P2, Pattern2),
+    \+ (Pattern1 = "ODD_WEEKS", Pattern2 = "EVEN_WEEKS"),
+    \+ (Pattern1 = "EVEN_WEEKS", Pattern2 = "ODD_WEEKS").
 
 time_minutes(TimeAtom, Minutes) :-
     ensure_string(TimeAtom, TimeStr),

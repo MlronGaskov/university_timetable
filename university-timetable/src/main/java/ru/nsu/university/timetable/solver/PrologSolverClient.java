@@ -1,5 +1,6 @@
 package ru.nsu.university.timetable.solver;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
@@ -14,13 +15,16 @@ import ru.nsu.university.timetable.solver.dto.SolverResponse;
 public class PrologSolverClient {
     private final RestTemplate restTemplate;
     private final String baseUrl;
+    private final ObjectMapper objectMapper;
 
     public PrologSolverClient(
             RestTemplate solverRestTemplate,
-            @Value("${solver.base-url:http://university-timetable-solver:5000}") String baseUrl
+            @Value("${solver.base-url:http://university-timetable-solver:5000}") String baseUrl,
+            ObjectMapper objectMapper
     ) {
         this.restTemplate = solverRestTemplate;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.objectMapper = objectMapper;
     }
 
     public SolverResponse solve(SolverRequest request) {
@@ -28,6 +32,14 @@ public class PrologSolverClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+
+        // Log the request for debugging
+        try {
+            String jsonRequest = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(request);
+            log.info("Sending request to solver:\n{}", jsonRequest);
+        } catch (Exception e) {
+            log.warn("Could not serialize request for logging", e);
+        }
 
         HttpEntity<SolverRequest> entity = new HttpEntity<>(request, headers);
 

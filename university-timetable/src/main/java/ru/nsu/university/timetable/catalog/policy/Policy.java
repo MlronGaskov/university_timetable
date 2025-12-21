@@ -31,24 +31,19 @@ public class Policy {
     @Column(nullable = false, length = 128)
     private String name;
 
-    @Lob
-    @Column(name = "grid_json", nullable = false)
+    @Column(name = "grid_json", nullable = false, columnDefinition = "TEXT")
     private String gridJson;
 
-    @Lob
-    @Column(name = "breaks_json", nullable = false)
+    @Column(name = "breaks_json", nullable = false, columnDefinition = "TEXT")
     private String breaksJson;
 
-    @Lob
-    @Column(name = "limits_json", nullable = false)
+    @Column(name = "limits_json", nullable = false, columnDefinition = "TEXT")
     private String limitsJson;
 
-    @Lob
-    @Column(name = "travel_matrix_json", nullable = false)
+    @Column(name = "travel_matrix_json", nullable = false, columnDefinition = "TEXT")
     private String travelMatrixJson;
 
-    @Lob
-    @Column(name = "weights_json", nullable = false)
+    @Column(name = "weights_json", nullable = false, columnDefinition = "TEXT")
     private String weightsJson;
 
     @CreatedDate

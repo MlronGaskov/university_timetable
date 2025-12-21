@@ -61,6 +61,9 @@ public class Course {
     @Column(nullable = false)
     private int plannedHours;
 
+    @Column(nullable = false)
+    private int requiredRoomCapacity;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private Status status;

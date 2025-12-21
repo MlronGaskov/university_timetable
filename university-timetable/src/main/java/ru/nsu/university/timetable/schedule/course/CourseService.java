@@ -50,7 +50,11 @@ public class CourseService {
                 .status(Status.ACTIVE)
                 .groupCodes(new ArrayList<>(normalizedGroupCodes))
                 .equipmentRequirements(mapItems(req.equipmentRequirements()))
+                .requiredRoomCapacity(0)
                 .build();
+
+        // Вычисляем requiredRoomCapacity после установки groupCodes
+        course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
 
         return map(courseRepository.save(course));
     }
@@ -105,6 +109,8 @@ public class CourseService {
                 }
             }
             course.setGroupCodes(new ArrayList<>(normalizedGroupCodes));
+            // Пересчитываем requiredRoomCapacity при изменении групп
+            course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
         if (req.equipmentRequirements() != null) {
@@ -145,6 +151,8 @@ public class CourseService {
 
         if (!course.getGroupCodes().contains(normalized)) {
             course.getGroupCodes().add(normalized);
+            // Пересчитываем requiredRoomCapacity при добавлении группы
+            course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
         return map(course);
@@ -157,6 +165,8 @@ public class CourseService {
         if (groupCode != null && !groupCode.isBlank()) {
             String normalized = groupCode.trim();
             course.getGroupCodes().remove(normalized);
+            // Пересчитываем requiredRoomCapacity при удалении группы
+            course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
         return map(course);
@@ -194,7 +204,7 @@ public class CourseService {
                 c.getTitle(),
                 c.getStatus(),
                 c.getPlannedHours(),
-                calculateRequiredRoomCapacity(c),
+                c.getRequiredRoomCapacity(),
                 c.getTeacherId(),
                 List.copyOf(c.getGroupCodes()),
                 items,
