@@ -1,0 +1,106 @@
+.infoLine {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 13px;
+}
+
+.error {
+    color: var(--color-danger);
+    margin-bottom: 8px;
+}
+
+/* СДЕЛАЛ ШИРЕ: было 260px, теперь заметно шире */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 12px;
+}
+
+.card {
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid var(--color-border-subtle);
+    padding: 12px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cardHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+}
+
+.cardTitle {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.version {
+    font-variant-numeric: tabular-nums;
+}
+
+.scoreTag {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.cardBody {
+    border-radius: 12px;
+    padding: 10px 10px;
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.line {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    min-width: 90px;
+}
+
+.muted {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.cardFooter {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.linkButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border-subtle);
+    background: #ffffff;
+    font-size: 13px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.linkButton:hover {
+    background: var(--color-surface-alt);
+}

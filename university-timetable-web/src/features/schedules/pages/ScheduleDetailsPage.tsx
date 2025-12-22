@@ -51,6 +51,8 @@ interface EnrichedSlot {
     room: RoomResponse | undefined;
 }
 
+const norm = (v: string) => v.trim().toLowerCase();
+
 export const ScheduleDetailsPage: React.FC = () => {
     const {scheduleId} = useParams<'scheduleId'>();
 
@@ -65,8 +67,9 @@ export const ScheduleDetailsPage: React.FC = () => {
     const [rooms, setRooms] = useState<RoomResponse[]>([]);
 
     const [viewMode, setViewMode] = useState<ViewMode>('ALL');
-    const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
-    const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+
+    const [teacherQuery, setTeacherQuery] = useState<string>('');
+    const [groupQuery, setGroupQuery] = useState<string>('');
 
     useEffect(() => {
         if (!scheduleId) return;
@@ -119,12 +122,13 @@ export const ScheduleDetailsPage: React.FC = () => {
 
         return schedule.slots.map(slot => {
             const course = courses.find(c => c.code === slot.courseCode);
+
             const teacher = course
                 ? teachers.find(t => t.teacherId === course.teacherId)
                 : undefined;
 
             const courseGroups: GroupResponse[] = course
-                ? groups.filter(g => course.groupCodes.includes(g.id))
+                ? groups.filter(g => course.groupCodes.includes(g.code))
                 : [];
 
             const room = rooms.find(r => r.roomCode === slot.roomCode);
@@ -145,46 +149,43 @@ export const ScheduleDetailsPage: React.FC = () => {
         });
     }, [schedule, courses, teachers, groups, rooms]);
 
-    const teacherOptions = useMemo(() => {
-        const ids = new Set<string>();
-        const result: TeacherResponse[] = [];
-
+    const teacherHints = useMemo(() => {
+        const map = new Map<string, TeacherResponse>();
         for (const s of enrichedSlots) {
-            if (s.teacher && !ids.has(s.teacher.id)) {
-                ids.add(s.teacher.id);
-                result.push(s.teacher);
-            }
+            if (s.teacher) map.set(s.teacher.teacherId, s.teacher);
         }
-        return result.sort((a, b) => a.fullName.localeCompare(b.fullName));
+        return Array.from(map.values()).sort((a, b) => a.teacherId.localeCompare(b.teacherId));
     }, [enrichedSlots]);
 
-    const groupOptions = useMemo(() => {
-        const ids = new Set<string>();
-        const result: GroupResponse[] = [];
-
+    const groupHints = useMemo(() => {
+        const map = new Map<string, GroupResponse>();
         for (const s of enrichedSlots) {
-            for (const g of s.groups) {
-                if (!ids.has(g.id)) {
-                    ids.add(g.id);
-                    result.push(g);
-                }
-            }
+            for (const g of s.groups) map.set(g.code, g);
         }
-        return result.sort((a, b) => a.name.localeCompare(b.name));
+        return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
     }, [enrichedSlots]);
 
     const filteredSlots = useMemo(() => {
         let slots = enrichedSlots;
 
-        if (viewMode === 'TEACHER' && selectedTeacherId) {
-            slots = slots.filter(
-                s => s.teacher && s.teacher.id === selectedTeacherId,
-            );
+        const tq = norm(teacherQuery);
+        const gq = norm(groupQuery);
+
+        if (viewMode === 'TEACHER' && tq) {
+            slots = slots.filter(s => {
+                const t = s.teacher;
+                if (!t) return false;
+                if (norm(t.teacherId).includes(tq)) return true;
+                return norm(t.fullName).includes(tq);
+            });
         }
 
-        if (viewMode === 'GROUP' && selectedGroupId) {
+        if (viewMode === 'GROUP' && gq) {
             slots = slots.filter(s =>
-                s.groups.some(g => g.id === selectedGroupId),
+                s.groups.some(g => {
+                    if (norm(g.code).includes(gq)) return true;
+                    return norm(g.name).includes(gq);
+                }),
             );
         }
 
@@ -196,14 +197,13 @@ export const ScheduleDetailsPage: React.FC = () => {
             if (a.startTime > b.startTime) return 1;
             return 0;
         });
-    }, [enrichedSlots, viewMode, selectedTeacherId, selectedGroupId]);
+    }, [enrichedSlots, viewMode, teacherQuery, groupQuery]);
 
     const slotsByDay = useMemo(() => {
         const map = new Map<string, EnrichedSlot[]>();
+
         for (const slot of filteredSlots) {
-            if (!map.has(slot.dayOfWeek)) {
-                map.set(slot.dayOfWeek, []);
-            }
+            if (!map.has(slot.dayOfWeek)) map.set(slot.dayOfWeek, []);
             map.get(slot.dayOfWeek)!.push(slot);
         }
 
@@ -309,8 +309,8 @@ export const ScheduleDetailsPage: React.FC = () => {
                                 onChange={e => {
                                     const v = e.target.value as ViewMode;
                                     setViewMode(v);
-                                    setSelectedTeacherId('');
-                                    setSelectedGroupId('');
+                                    setTeacherQuery('');
+                                    setGroupQuery('');
                                 }}
                             >
                                 <option value="ALL">Все слоты</option>
@@ -321,38 +321,58 @@ export const ScheduleDetailsPage: React.FC = () => {
 
                         {viewMode === 'TEACHER' && (
                             <div className={styles.modeBlock}>
-                                <span className={styles.modeLabel}>Преподаватель:</span>
-                                <select
-                                    className={styles.select}
-                                    value={selectedTeacherId}
-                                    onChange={e => setSelectedTeacherId(e.target.value)}
-                                >
-                                    <option value="">Все</option>
-                                    {teacherOptions.map(t => (
-                                        <option key={t.id} value={t.id}>
-                                            {t.fullName} ({t.teacherId})
+                                <span className={styles.modeLabel}>Код препода:</span>
+                                <input
+                                    className={styles.input}
+                                    type="text"
+                                    value={teacherQuery}
+                                    onChange={e => setTeacherQuery(e.target.value)}
+                                    placeholder="Напр. IVANOV_AS"
+                                    list="teacher-hints"
+                                    autoComplete="off"
+                                />
+                                <datalist id="teacher-hints">
+                                    {teacherHints.map(t => (
+                                        <option
+                                            key={t.id}
+                                            value={t.teacherId}
+                                        >
+                                            {t.fullName}
                                         </option>
                                     ))}
-                                </select>
+                                </datalist>
                             </div>
                         )}
 
                         {viewMode === 'GROUP' && (
                             <div className={styles.modeBlock}>
-                                <span className={styles.modeLabel}>Группа:</span>
-                                <select
-                                    className={styles.select}
-                                    value={selectedGroupId}
-                                    onChange={e => setSelectedGroupId(e.target.value)}
-                                >
-                                    <option value="">Все</option>
-                                    {groupOptions.map(g => (
-                                        <option key={g.id} value={g.id}>
-                                            {g.name} ({g.code})
+                                <span className={styles.modeLabel}>Код группы:</span>
+                                <input
+                                    className={styles.input}
+                                    type="text"
+                                    value={groupQuery}
+                                    onChange={e => setGroupQuery(e.target.value)}
+                                    placeholder="Напр. PI-402"
+                                    list="group-hints"
+                                    autoComplete="off"
+                                />
+                                <datalist id="group-hints">
+                                    {groupHints.map(g => (
+                                        <option
+                                            key={g.id}
+                                            value={g.code}
+                                        >
+                                            {g.name}
                                         </option>
                                     ))}
-                                </select>
+                                </datalist>
                             </div>
+                        )}
+
+                        {(viewMode === 'TEACHER' || viewMode === 'GROUP') && (
+                            <span className={styles.hint}>
+                                Найдено слотов: <b>{filteredSlots.length}</b>
+                            </span>
                         )}
                     </div>
 
@@ -372,22 +392,20 @@ export const ScheduleDetailsPage: React.FC = () => {
                                             {day}
                                         </span>
                                     </header>
+
                                     <ul className={styles.slotsList}>
                                         {slots.map(s => (
                                             <li key={s.id} className={styles.slotRow}>
                                                 <div className={styles.slotTime}>
                                                     {s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}
                                                     {s.weekPattern === 'ODD_WEEKS' && (
-                                                        <span className={styles.weekTag}>
-                                                            нечётные
-                                                        </span>
+                                                        <span className={styles.weekTag}>нечётные</span>
                                                     )}
                                                     {s.weekPattern === 'EVEN_WEEKS' && (
-                                                        <span className={styles.weekTag}>
-                                                            чётные
-                                                        </span>
+                                                        <span className={styles.weekTag}>чётные</span>
                                                     )}
                                                 </div>
+
                                                 <div className={styles.slotMain}>
                                                     <div className={styles.slotTitle}>
                                                         {s.course?.code ?? s.course?.id ?? 'Курс'}
@@ -397,11 +415,10 @@ export const ScheduleDetailsPage: React.FC = () => {
                                                             </span>
                                                         )}
                                                     </div>
+
                                                     {s.teacher && (
                                                         <div className={styles.slotLine}>
-                                                            <span className={styles.label}>
-                                                                Преподаватель:
-                                                            </span>
+                                                            <span className={styles.label}>Преподаватель:</span>
                                                             <span>
                                                                 {s.teacher.fullName}{' '}
                                                                 <span className={styles.muted}>
@@ -410,6 +427,7 @@ export const ScheduleDetailsPage: React.FC = () => {
                                                             </span>
                                                         </div>
                                                     )}
+
                                                     {s.groups.length > 0 && (
                                                         <div className={styles.slotLine}>
                                                             <span className={styles.label}>Группы:</span>
@@ -420,10 +438,11 @@ export const ScheduleDetailsPage: React.FC = () => {
                                                             </span>
                                                         </div>
                                                     )}
+
                                                     <div className={styles.slotLine}>
                                                         <span className={styles.label}>Аудитория:</span>
                                                         <span>
-                                                            {s.room?.roomCode ?? s.room?.id ?? s.room?.roomCode ?? '—'}
+                                                            {s.room?.roomCode ?? s.room?.id ?? '—'}
                                                             {s.room && (
                                                                 <span className={styles.muted}>
                                                                     {` — ${s.room.building} / ${s.room.number}`}
@@ -431,6 +450,7 @@ export const ScheduleDetailsPage: React.FC = () => {
                                                             )}
                                                         </span>
                                                     </div>
+
                                                     <div className={styles.slotLine}>
                                                         <span className={styles.label}>Период:</span>
                                                         <span className={styles.muted}>

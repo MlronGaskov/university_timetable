@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 import {Page} from '@/components/layout/Page';
 import {schedulesApi} from '@/api/schedules';
@@ -8,10 +8,10 @@ import type {SemesterResponse} from '@/types/semesters';
 import {formatDate, formatInstant} from '@/utils/formatters';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Button} from '@/components/ui/Button';
+import styles from './SemesterSchedulesPage.module.css';
 
 export const SemesterSchedulesPage: React.FC = () => {
     const {semesterCode} = useParams<{ semesterCode: string }>();
-
     const {isAdmin} = useRoleGuard();
 
     const [semester, setSemester] = useState<SemesterResponse | null>(null);
@@ -20,59 +20,74 @@ export const SemesterSchedulesPage: React.FC = () => {
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const normalizedSemesterCode = useMemo(
+        () => (semesterCode ?? '').trim(),
+        [semesterCode],
+    );
+
+    const load = useCallback(async () => {
+        if (!normalizedSemesterCode) return;
+
+        setLoading(true);
+        setError(null);
+        try {
+            const [allSemesters, scheds] = await Promise.all([
+                semestersApi.getAll(),
+                schedulesApi.getForSemester(normalizedSemesterCode),
+            ]);
+
+            const sem =
+                allSemesters.find(
+                    s => s.code.toLowerCase() === normalizedSemesterCode.toLowerCase(),
+                ) ?? null;
+
+            setSemester(sem);
+            setSchedules(scheds);
+        } catch (e) {
+            console.error(e);
+            setError('Не удалось загрузить расписания для семестра');
+        } finally {
+            setLoading(false);
+        }
+    }, [normalizedSemesterCode]);
+
     useEffect(() => {
-        if (!semesterCode) return;
+        if (!normalizedSemesterCode) return;
+        void load();
+    }, [load, normalizedSemesterCode]);
 
-        (async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const [allSemesters, scheds] = await Promise.all([
-                    semestersApi.getAll(),
-                    schedulesApi.getForSemester(semesterCode),
-                ]);
+    const handleGenerate = useCallback(async () => {
+        if (!normalizedSemesterCode) return;
 
-                const sem =
-                    allSemesters.find(
-                        (s) => s.code.toLowerCase() === semesterCode.toLowerCase(),
-                    ) ?? null;
-
-                setSemester(sem);
-                setSchedules(scheds);
-            } catch (e) {
-                console.error(e);
-                setError('Не удалось загрузить расписания для семестра');
-            } finally {
-                setLoading(false);
-            }
-        })();
-    }, [semesterCode]);
-
-    const handleGenerate = async () => {
-        if (!semester) return;
         setGenerating(true);
         setError(null);
         try {
-            console.log(semester.code)
-            const newSchedule = await schedulesApi.generateForSemester(semester!.code);
-            setSchedules(prev => [newSchedule, ...prev]);
+            const newSchedule = await schedulesApi.generateForSemester(normalizedSemesterCode);
+
+            setSchedules(prev => {
+                const filtered = prev.filter(s => s.id !== newSchedule.id);
+                return [newSchedule, ...filtered];
+            });
         } catch (e) {
             console.error(e);
             setError('Ошибка генерации расписания');
         } finally {
             setGenerating(false);
         }
-    };
+    }, [normalizedSemesterCode]);
 
     const title = semester
         ? `Расписания семестра ${semester.code}`
-        : 'Расписания семестра';
+        : normalizedSemesterCode
+            ? `Расписания семестра ${normalizedSemesterCode}`
+            : 'Расписания семестра';
 
+    const isEmpty = !loading && !error && schedules.length === 0;
     return (
         <Page
             title={title}
             actions={
-                isAdmin && semesterCode ? (
+                isAdmin && normalizedSemesterCode ? (
                     <Button
                         variant="primary"
                         onClick={handleGenerate}
@@ -84,7 +99,7 @@ export const SemesterSchedulesPage: React.FC = () => {
             }
         >
             {semester && (
-                <p style={{marginTop: 0, marginBottom: 16, fontSize: 13}}>
+                <p className={styles.infoLine}>
                     Период: {formatDate(semester.startAt)} — {formatDate(semester.endAt)} | Политика:{' '}
                     <code>{semester.policyName}</code>
                 </p>
@@ -92,40 +107,44 @@ export const SemesterSchedulesPage: React.FC = () => {
 
             {loading && <p>Загрузка…</p>}
             {error && (
-                <p style={{color: '#f97373', marginBottom: 8}}>
+                <p className={styles.error}>
                     {error}
                 </p>
             )}
 
-            {!loading && schedules.length === 0 && !error && (
+            {isEmpty && (
                 <p>Для этого семестра ещё нет сгенерированных расписаний.</p>
             )}
 
             {!loading && schedules.length > 0 && (
-                <table style={{width: '100%', fontSize: 14, borderCollapse: 'collapse'}}>
-                    <thead>
-                    <tr>
-                        <th align="left">Версия</th>
-                        <th align="left">Оценка</th>
-                        <th align="left">Создано</th>
-                        <th align="left">Обновлено</th>
-                        <th align="left">Действия</th>
-                    </tr>
-                    </thead>
-                    <tbody>
+                <div className={styles.grid}>
                     {schedules.map(s => (
-                        <tr key={s.id}>
-                            <td>{s.version}</td>
-                            <td>{s.evaluationScore ?? '—'}</td>
-                            <td>{formatInstant(s.createdAt)}</td>
-                            <td>{formatInstant(s.updatedAt)}</td>
-                            <td>
-                                <Link to={`/schedules/${s.id}`}>Открыть</Link>
-                            </td>
-                        </tr>
+                        <section key={s.id} className={styles.card}>
+                            <header className={styles.cardHeader}>
+                                <div className={styles.cardTitle}>
+                                    Версия <span className={styles.version}>{s.version}</span>
+                                </div>
+                                <span className={styles.scoreTag}>
+                                    оценка: {s.evaluationScore ?? '—'}
+                                </span>
+                            </header>
+
+                            <div className={styles.cardBody}>
+                                <div className={styles.line}>
+                                    <span className={styles.label}>Создано:</span>
+                                    <span className={styles.muted}>{formatInstant(s.createdAt)}</span>
+                                </div>
+                                {/* УБРАЛИ "Обновлено", как просил */}
+                            </div>
+
+                            <footer className={styles.cardFooter}>
+                                <Link className={styles.linkButton} to={`/schedules/${s.id}`}>
+                                    Открыть
+                                </Link>
+                            </footer>
+                        </section>
                     ))}
-                    </tbody>
-                </table>
+                </div>
             )}
         </Page>
     );
