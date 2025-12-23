@@ -1,13 +1,17 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 import {Page} from '@/components/layout/Page';
+import {Button} from '@/components/ui/Button';
+
 import {schedulesApi} from '@/api/schedules';
 import {semestersApi} from '@/api/semesters';
-import type {ScheduleSummaryResponse} from '@/types/schedules';
+
+import type {ScheduleResponse, ScheduleSummaryResponse} from '@/types/schedules';
 import type {SemesterResponse} from '@/types/semesters';
+
 import {formatDate, formatInstant} from '@/utils/formatters';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
-import {Button} from '@/components/ui/Button';
+
 import styles from './SemesterSchedulesPage.module.css';
 
 export const SemesterSchedulesPage: React.FC = () => {
@@ -19,6 +23,9 @@ export const SemesterSchedulesPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Чтобы сразу показать “неразмещённые пары” после генерации
+    const [lastGenerated, setLastGenerated] = useState<ScheduleResponse | null>(null);
 
     const normalizedSemesterCode = useMemo(
         () => (semesterCode ?? '').trim(),
@@ -61,12 +68,26 @@ export const SemesterSchedulesPage: React.FC = () => {
 
         setGenerating(true);
         setError(null);
+        setLastGenerated(null);
+
         try {
-            const newSchedule = await schedulesApi.generateForSemester(normalizedSemesterCode);
+            // backend возвращает ScheduleResponse (детали + unplaced)
+            const generated = await schedulesApi.generateForSemester(normalizedSemesterCode);
+            setLastGenerated(generated);
+
+            // список версий на странице — это summary, поэтому маппим
+            const summary: ScheduleSummaryResponse = {
+                id: generated.id,
+                semesterCode: generated.semesterCode,
+                version: generated.version,
+                evaluationScore: generated.evaluationScore,
+                createdAt: generated.createdAt,
+                updatedAt: generated.updatedAt,
+            };
 
             setSchedules(prev => {
-                const filtered = prev.filter(s => s.id !== newSchedule.id);
-                return [newSchedule, ...filtered];
+                const filtered = prev.filter(s => s.id !== summary.id);
+                return [summary, ...filtered];
             });
         } catch (e) {
             console.error(e);
@@ -83,6 +104,8 @@ export const SemesterSchedulesPage: React.FC = () => {
             : 'Расписания семестра';
 
     const isEmpty = !loading && !error && schedules.length === 0;
+    const unplacedCount = lastGenerated?.unplaced?.length ?? 0;
+
     return (
         <Page
             title={title}
@@ -106,10 +129,35 @@ export const SemesterSchedulesPage: React.FC = () => {
             )}
 
             {loading && <p>Загрузка…</p>}
-            {error && (
-                <p className={styles.error}>
-                    {error}
-                </p>
+            {error && <p className={styles.error}>{error}</p>}
+
+            {lastGenerated && (
+                <section className={styles.resultBox}>
+                    <div className={styles.resultTitle}>
+                        Результат генерации: версия <b>{lastGenerated.version}</b>{' '}
+                        {unplacedCount > 0 ? (
+                            <>— не удалось разместить <b>{unplacedCount}</b> пар(ы)</>
+                        ) : (
+                            <>— все пары размещены</>
+                        )}
+                    </div>
+
+                    <div className={styles.resultActions}>
+                        <Link className={styles.linkButton} to={`/schedules/${lastGenerated.id}`}>
+                            Открыть расписание
+                        </Link>
+                    </div>
+
+                    {unplacedCount > 0 && (
+                        <ul className={styles.unplacedList}>
+                            {lastGenerated.unplaced.map(u => (
+                                <li key={`${u.courseId}-${u.reason}`} className={styles.unplacedItem}>
+                                    <b>{u.courseId}</b> — {u.reason}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
             )}
 
             {isEmpty && (
@@ -134,7 +182,6 @@ export const SemesterSchedulesPage: React.FC = () => {
                                     <span className={styles.label}>Создано:</span>
                                     <span className={styles.muted}>{formatInstant(s.createdAt)}</span>
                                 </div>
-                                {/* УБРАЛИ "Обновлено", как просил */}
                             </div>
 
                             <footer className={styles.cardFooter}>

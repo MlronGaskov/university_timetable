@@ -6,4 +6,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["swipl", "-q", "-s", "main.pl"]
+CMD ["swipl", "--stack-limit=13g", "-O", "-q", "-s", "main.pl"]

@@ -18,7 +18,6 @@ import {ActionsCell} from '@/components/ui/ActionsCell';
 import {CsvMessages} from '@/components/ui/CsvMessages';
 import {CsvToolbar} from '@/components/ui/CsvToolbar';
 import {downloadCsv} from '@/utils/csv';
-import {formatInstant} from '@/utils/formatters';
 import crudStyles from '@/components/ui/CrudFormLayout.module.css';
 import styles from './CoursesListPage.module.css';
 
@@ -56,6 +55,86 @@ const splitCsvLine = (line: string): string[] => {
     }
     result.push(current);
     return result;
+};
+
+const parseCsv = (text: string): CsvRow[] => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const header = splitCsvLine(lines[0]).map(h => h.trim());
+    const idx = (name: string) => header.indexOf(name);
+
+    const idxCode = idx('code');
+    const idxTitle = idx('title');
+    const idxTeacherId = idx('teacherId');
+    const idxPlannedHours = idx('plannedHours');
+    const idxEquipmentJson = idx('equipmentJson');
+    const idxGroupCodes = idx('groupCodes');
+
+    if (idxCode < 0 || idxTitle < 0 || idxTeacherId < 0 || idxPlannedHours < 0) {
+        throw new Error(
+            'Ожидаются колонки как минимум: code,title,teacherId,plannedHours[,equipmentJson,groupCodes]',
+        );
+    }
+
+    const rows: CsvRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+        const rawLine = lines[i].trim();
+        if (!rawLine) continue;
+        const parts = splitCsvLine(rawLine);
+
+        const safe = (idxN: number) => (parts[idxN] ?? '').trim();
+
+        const hoursStr = safe(idxPlannedHours);
+        const hours = Number.parseInt(hoursStr, 10);
+
+        let groupCodes: string[] = [];
+        if (idxGroupCodes >= 0) {
+            const raw = safe(idxGroupCodes);
+            if (raw) {
+                groupCodes = raw
+                    .split(';')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+            }
+        }
+
+        rows.push({
+            code: safe(idxCode),
+            title: safe(idxTitle),
+            teacherId: safe(idxTeacherId),
+            plannedHours: hours,
+            equipmentJson: idxEquipmentJson >= 0 ? safe(idxEquipmentJson) || null : null,
+            groupCodes,
+            rowNumber: i + 1,
+        });
+    }
+    return rows;
+};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: any[]}> => {
+    const results: T[] = [];
+    const errors: any[] = [];
+
+    let i = 0;
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e) {
+                errors.push(e);
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
 };
 
 export const CoursesListPage: React.FC = () => {
@@ -129,17 +208,11 @@ export const CoursesListPage: React.FC = () => {
         setFormError(null);
     };
 
-    const handleEquipmentChange = (
-        index: number,
-        field: 'name' | 'quantity',
-        value: string,
-    ) => {
+    const handleEquipmentChange = (index: number, field: 'name' | 'quantity', value: string) => {
         setEquipment(prev =>
             prev.map((it, i) => {
                 if (i !== index) return it;
-                if (field === 'name') {
-                    return {...it, name: value};
-                }
+                if (field === 'name') return {...it, name: value};
                 const q = Number.parseInt(value, 10);
                 return {...it, quantity: Number.isFinite(q) && q > 0 ? q : 0};
             }),
@@ -169,10 +242,10 @@ export const CoursesListPage: React.FC = () => {
             return;
         }
 
-        const normalizedEquipment: CourseEquipmentItemDto[] = equipment
+        const normalizedEquipment: CourseEquipmentItemDto[] = (equipment ?? [])
             .map(it => ({
-                name: it.name.trim(),
-                quantity: Number.parseInt(String(it.quantity), 10),
+                name: String(it.name ?? '').trim(),
+                quantity: Number.parseInt(String(it.quantity ?? '0'), 10),
             }))
             .filter(it => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
 
@@ -233,16 +306,27 @@ export const CoursesListPage: React.FC = () => {
         }
     };
 
-    const formatEquipmentSummary = (items: CourseEquipmentItemDto[]): string => {
-        if (!items || items.length === 0) return '—';
-        return items.map(i => `${i.name}×${i.quantity}`).join(', ');
+    const equipmentTitle = (eq: CourseEquipmentItemDto[]): string => {
+        if (!eq || eq.length === 0) return '—';
+        return eq.map(i => `${i.name}×${i.quantity}`).join('\n');
+    };
+
+    const renderEquipment = (eq: CourseEquipmentItemDto[]) => {
+        if (!eq || eq.length === 0) return '—';
+        return (
+            <div title={equipmentTitle(eq)}>
+                {eq.map((i, idx) => (
+                    <React.Fragment key={`${i.name}-${idx}`}>
+                        {i.name}×{i.quantity}
+                        {idx < eq.length - 1 ? <br /> : null}
+                    </React.Fragment>
+                ))}
+            </div>
+        );
     };
 
     const currentCourse = useMemo(
-        () =>
-            groupsCourseId
-                ? items.find(c => c.id === groupsCourseId) ?? null
-                : null,
+        () => (groupsCourseId ? items.find(c => c.id === groupsCourseId) ?? null : null),
         [groupsCourseId, items],
     );
 
@@ -305,67 +389,6 @@ export const CoursesListPage: React.FC = () => {
         }
     };
 
-    const parseCsv = (text: string): CsvRow[] => {
-        const lines = text.trim().split(/\r?\n/);
-        if (lines.length < 2) return [];
-
-        const header = splitCsvLine(lines[0]).map(h => h.trim());
-        const idx = (name: string) => header.indexOf(name);
-
-        const idxCode = idx('code');
-        const idxTitle = idx('title');
-        const idxTeacherId = idx('teacherId');
-        const idxPlannedHours = idx('plannedHours');
-        const idxEquipmentJson = idx('equipmentJson');
-        const idxGroupCodes = idx('groupCodes');
-
-        if (
-            idxCode < 0 ||
-            idxTitle < 0 ||
-            idxTeacherId < 0 ||
-            idxPlannedHours < 0
-        ) {
-            throw new Error(
-                'Ожидаются колонки как минимум: code,title,teacherId,plannedHours[,equipmentJson,groupCodes]',
-            );
-        }
-
-        const rows: CsvRow[] = [];
-        for (let i = 1; i < lines.length; i++) {
-            const rawLine = lines[i].trim();
-            if (!rawLine) continue;
-            const parts = splitCsvLine(rawLine);
-
-            const safe = (idx: number) => (parts[idx] ?? '').trim();
-
-            const hoursStr = safe(idxPlannedHours);
-            const hours = Number.parseInt(hoursStr, 10);
-
-            let groupCodes: string[] = [];
-            if (idxGroupCodes >= 0) {
-                const raw = safe(idxGroupCodes);
-                if (raw) {
-                    groupCodes = raw
-                        .split(';')
-                        .map(s => s.trim())
-                        .filter(Boolean);
-                }
-            }
-
-            rows.push({
-                code: safe(idxCode),
-                title: safe(idxTitle),
-                teacherId: safe(idxTeacherId),
-                plannedHours: hours,
-                equipmentJson:
-                    idxEquipmentJson >= 0 ? safe(idxEquipmentJson) || null : null,
-                groupCodes,
-                rowNumber: i + 1,
-            });
-        }
-        return rows;
-    };
-
     const importFromFile = async (file: File) => {
         if (!isAdmin) return;
 
@@ -382,8 +405,9 @@ export const CoursesListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
+            let createdCount = 0;
             const errors: string[] = [];
+            const createdCourses: CourseResponse[] = [];
 
             for (const row of rows) {
                 if (
@@ -407,27 +431,15 @@ export const CoursesListPage: React.FC = () => {
                             parsedEquipment = raw
                                 .map((it: any) => ({
                                     name: String(it?.name ?? '').trim(),
-                                    quantity: Number.parseInt(
-                                        String(it?.quantity ?? '0'),
-                                        10,
-                                    ),
+                                    quantity: Number.parseInt(String(it?.quantity ?? '0'), 10),
                                 }))
-                                .filter(
-                                    it =>
-                                        it.name &&
-                                        Number.isFinite(it.quantity) &&
-                                        it.quantity > 0,
-                                );
+                                .filter(it => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
                         } else {
-                            errors.push(
-                                `Строка ${row.rowNumber}: equipmentJson должен быть массивом`,
-                            );
+                            errors.push(`Строка ${row.rowNumber}: equipmentJson должен быть массивом`);
                         }
                     } catch (err) {
                         console.error(err);
-                        errors.push(
-                            `Строка ${row.rowNumber}: ошибка парсинга equipmentJson`,
-                        );
+                        errors.push(`Строка ${row.rowNumber}: ошибка парсинга equipmentJson`);
                     }
                 }
 
@@ -438,23 +450,47 @@ export const CoursesListPage: React.FC = () => {
                         teacherId: row.teacherId,
                         plannedHours: row.plannedHours,
                         equipmentRequirements: parsedEquipment,
-                        groupCodes: row.groupCodes,
+                        groupCodes: [],
                     };
                     const created = await coursesApi.create(body);
-                    success++;
-                    setItems(prev => [...prev, created]);
+                    createdCourses.push(created);
+                    createdCount++;
                 } catch (err: any) {
                     console.error(err);
                     errors.push(
-                        `Строка ${row.rowNumber}: ${
-                            err?.body?.message ?? 'ошибка создания курса'
-                        }`,
+                        `Строка ${row.rowNumber}: ${err?.body?.message ?? 'ошибка создания курса'}`,
                     );
                 }
             }
 
+            if (createdCourses.length > 0) {
+                setItems(prev => [...prev, ...createdCourses]);
+            }
+
+            const groupTasks: Array<() => Promise<void>> = [];
+            for (const row of rows) {
+                const created = createdCourses.find(c => c.code === row.code);
+                if (!created) continue;
+                for (const gc of row.groupCodes ?? []) {
+                    groupTasks.push(async () => {
+                        await coursesApi.addGroup(created.id, gc);
+                    });
+                }
+            }
+
+            if (groupTasks.length > 0) {
+                const {errors: groupErrors} = await runWithLimit(groupTasks, 8);
+                if (groupErrors.length) {
+                    errors.push(`Ошибок привязки групп: ${groupErrors.length}`);
+                }
+            }
+
+            const fresh = await coursesApi.getAll();
+            setItems(fresh);
+
             const summary = [
-                `Успешно создано курсов: ${success}`,
+                `Успешно создано курсов: ${createdCount}`,
+                groupTasks.length ? `Привязок групп отправлено: ${groupTasks.length}` : '',
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -519,11 +555,7 @@ export const CoursesListPage: React.FC = () => {
                 <form className={styles.groupsForm} onSubmit={handleAddGroup}>
                     <div className={styles.groupsHeader}>
                         <strong>Группы курса {currentCourse.code}</strong>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={closeGroupsForm}
-                        >
+                        <Button type="button" variant="ghost" onClick={closeGroupsForm}>
                             Закрыть
                         </Button>
                     </div>
@@ -565,23 +597,16 @@ export const CoursesListPage: React.FC = () => {
                                 </option>
                             ))}
                         </select>
-                        <Button
-                            type="submit"
-                            disabled={!groupToAddCode || groupsProcessing}
-                        >
+                        <Button type="submit" disabled={!groupToAddCode || groupsProcessing}>
                             Добавить группу
                         </Button>
                     </div>
 
-                    {groupsError && (
-                        <p className={styles.groupsError}>{groupsError}</p>
-                    )}
+                    {groupsError && <p className={styles.groupsError}>{groupsError}</p>}
 
                     <p className={styles.groupsHint}>
-                        Привязка групп влияет на генерацию расписания (какие группы
-                        ходят на конкретный курс). В CSV используется колонка{' '}
-                        <code>groupCodes</code> — список кодов групп, разделённых
-                        точкой с запятой.
+                        Привязка групп влияет на генерацию расписания. В CSV используется колонка{' '}
+                        <code>groupCodes</code> — список кодов групп, разделённых точкой с запятой.
                     </p>
                 </form>
             )}
@@ -594,11 +619,8 @@ export const CoursesListPage: React.FC = () => {
                     <FormField label="Название">
                         <Input value={title} onChange={e => setTitle(e.target.value)} />
                     </FormField>
-                    <FormField label="Преподаватель ID">
-                        <Input
-                            value={teacherId}
-                            onChange={e => setTeacherId(e.target.value)}
-                        />
+                    <FormField label="ID Преподавателя">
+                        <Input value={teacherId} onChange={e => setTeacherId(e.target.value)} />
                     </FormField>
                     <FormField label="Плановые часы">
                         <Input
@@ -611,30 +633,20 @@ export const CoursesListPage: React.FC = () => {
 
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
-                            {saving
-                                ? 'Сохранение…'
-                                : formMode === 'create'
-                                    ? 'Создать'
-                                    : 'Сохранить'}
+                            {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
                     </div>
 
-                    {formError && (
-                        <div className={crudStyles.formError}>{formError}</div>
-                    )}
+                    {formError && <div className={crudStyles.formError}>{formError}</div>}
 
                     <div className={styles.itemsBlock}>
                         <div className={styles.itemsHeader}>
                             <strong>Требуемое оборудование</strong>
                             {equipment.length > 0 && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setEquipment([])}
-                                >
+                                <Button type="button" variant="ghost" onClick={() => setEquipment([])}>
                                     Очистить
                                 </Button>
                             )}
@@ -645,52 +657,30 @@ export const CoursesListPage: React.FC = () => {
                                 <Input
                                     placeholder="Название (проектор, ПК…)"
                                     value={it.name}
-                                    onChange={e =>
-                                        handleEquipmentChange(
-                                            idx,
-                                            'name',
-                                            e.target.value,
-                                        )
-                                    }
+                                    onChange={e => handleEquipmentChange(idx, 'name', e.target.value)}
                                 />
                                 <Input
                                     type="number"
                                     min={1}
                                     placeholder="Кол-во"
                                     value={it.quantity ? String(it.quantity) : ''}
-                                    onChange={e =>
-                                        handleEquipmentChange(
-                                            idx,
-                                            'quantity',
-                                            e.target.value,
-                                        )
-                                    }
+                                    onChange={e => handleEquipmentChange(idx, 'quantity', e.target.value)}
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => handleRemoveEquipment(idx)}
-                                >
+                                <Button type="button" variant="ghost" onClick={() => handleRemoveEquipment(idx)}>
                                     Удалить
                                 </Button>
                             </div>
                         ))}
 
                         <div className={styles.itemsFooter}>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={handleAddEquipment}
-                            >
+                            <Button type="button" variant="secondary" onClick={handleAddEquipment}>
                                 Добавить требование
                             </Button>
                         </div>
 
                         <p className={styles.itemsHint}>
-                            Требуемое оборудование используется при подборе аудиторий
-                            (сравнивается с оборудованием в справочнике «Аудитории»). В
-                            CSV оно хранится в колонке <code>equipmentJson</code> как
-                            JSON-массив <code>{"{name, quantity}"}</code>.
+                            Требуемое оборудование используется при подборе аудиторий. В CSV оно хранится в колонке{' '}
+                            <code>equipmentJson</code> как JSON-массив <code>{'{name, quantity}'}</code>.
                         </p>
                     </div>
                 </form>
@@ -704,13 +694,10 @@ export const CoursesListPage: React.FC = () => {
                     <tr>
                         <th align="left">Код</th>
                         <th align="left">Название</th>
-                        <th align="left">Преподаватель ID</th>
+                        <th align="left">Преподаватель</th>
                         <th align="left">Часы</th>
                         <th align="left">Требуемая вместимость</th>
-                        <th align="left">Группы</th>
                         <th align="left">Оборудование</th>
-                        <th align="left">Статус</th>
-                        <th align="left">Обновлено</th>
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
@@ -722,51 +709,21 @@ export const CoursesListPage: React.FC = () => {
                             <td>{c.teacherId}</td>
                             <td>{c.plannedHours}</td>
                             <td>{c.requiredRoomCapacity}</td>
-                            <td>{c.groupCodes.length}</td>
-                            <td>
-                                <span
-                                    className={styles.itemsSummary}
-                                    title={formatEquipmentSummary(
-                                        c.equipmentRequirements ?? [],
-                                    )}
-                                >
-                                    {formatEquipmentSummary(
-                                        c.equipmentRequirements ?? [],
-                                    )}
-                                </span>
-                            </td>
-                            <td>{c.status}</td>
-                            <td>{formatInstant(c.updatedAt)}</td>
+                            <td className={styles.itemsSummary}>{renderEquipment(c.equipmentRequirements ?? [])}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(c)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(c)}>
                                         Редактировать
                                     </Button>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openGroupsForm(c)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openGroupsForm(c)}>
                                         Группы
                                     </Button>
                                     {c.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleArchive(c.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(c.id)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(c.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(c.id)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -776,7 +733,7 @@ export const CoursesListPage: React.FC = () => {
                     ))}
                     {items.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={isAdmin ? 10 : 9}>Нет курсов</td>
+                            <td colSpan={isAdmin ? 7 : 6}>Нет курсов</td>
                         </tr>
                     )}
                     </tbody>

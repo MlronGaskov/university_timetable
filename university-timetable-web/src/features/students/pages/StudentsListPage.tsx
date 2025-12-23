@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {studentsApi} from '@/api/students';
-import type {CreateStudentRequest, StudentResponse, UpdateStudentRequest,} from '@/types/students';
+import type {CreateStudentRequest, StudentResponse, UpdateStudentRequest} from '@/types/students';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Input} from '@/components/ui/Input';
 import {FormField} from '@/components/ui/FormField';
@@ -18,6 +18,38 @@ interface CsvRow {
     studentId: string;
     rowNumber: number;
 }
+
+type ImportTaskError = {
+    rowNumber: number;
+    message: string;
+};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: ImportTaskError[]}> => {
+    const results: T[] = [];
+    const errors: ImportTaskError[] = [];
+    let i = 0;
+
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e: any) {
+                const rowNumber = Number(e?.rowNumber ?? 0) || 0;
+                const message = String(e?.message ?? e?.body?.message ?? 'ошибка импорта');
+                errors.push({rowNumber, message});
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
+};
 
 export const StudentsListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
@@ -168,29 +200,44 @@ export const StudentsListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
-            const errors: string[] = [];
+            const validationErrors: string[] = [];
+            const tasks: Array<() => Promise<StudentResponse>> = [];
 
             for (const row of rows) {
                 if (!row.fullName || !row.studentId) {
-                    errors.push(`Строка ${row.rowNumber}: пустые fullName или studentId`);
+                    validationErrors.push(`Строка ${row.rowNumber}: пустые fullName или studentId`);
                     continue;
                 }
-                try {
-                    const created = await studentsApi.create({
-                        fullName: row.fullName,
-                        studentId: row.studentId,
-                    });
-                    success++;
-                    setItems(prev => [...prev, created]);
-                } catch (err: any) {
-                    console.error(err);
-                    errors.push(`Строка ${row.rowNumber}: ${err?.body?.message ?? 'ошибка создания'}`);
-                }
+
+                tasks.push(async () => {
+                    try {
+                        return await studentsApi.create({
+                            fullName: row.fullName,
+                            studentId: row.studentId,
+                        });
+                    } catch (err: any) {
+                        const msg =
+                            err?.body?.message ??
+                            (typeof err?.message === 'string' ? err.message : null) ??
+                            'ошибка создания';
+                        throw {rowNumber: row.rowNumber, message: msg};
+                    }
+                });
+            }
+
+            const {results: createdStudents, errors: taskErrors} = await runWithLimit(tasks, 8);
+
+            if (createdStudents.length > 0) {
+                setItems(prev => [...prev, ...createdStudents]);
+            }
+
+            const errors: string[] = [...validationErrors];
+            for (const e of taskErrors) {
+                errors.push(`Строка ${e.rowNumber}: ${e.message}`);
             }
 
             const summary = [
-                `Успешно создано: ${success}`,
+                `Успешно создано: ${createdStudents.length}`,
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -227,16 +274,17 @@ export const StudentsListPage: React.FC = () => {
 
     return (
         <Page title="Студенты" actions={actions}>
-            <CsvMessages error={csvError} result={csvResult}/>
+            <CsvMessages error={csvError} result={csvResult} />
 
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="ФИО">
-                        <Input value={fullName} onChange={e => setFullName(e.target.value)}/>
+                        <Input value={fullName} onChange={e => setFullName(e.target.value)} />
                     </FormField>
                     <FormField label="Студенческий ID">
-                        <Input value={studentId} onChange={e => setStudentId(e.target.value)}/>
+                        <Input value={studentId} onChange={e => setStudentId(e.target.value)} />
                     </FormField>
+
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
@@ -245,6 +293,7 @@ export const StudentsListPage: React.FC = () => {
                             Отмена
                         </Button>
                     </div>
+
                     {formError && <div className={crudStyles.formError}>{formError}</div>}
                 </form>
             )}
@@ -269,27 +318,15 @@ export const StudentsListPage: React.FC = () => {
                             <td>{s.status}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(s)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(s)}>
                                         Редактировать
                                     </Button>
                                     {s.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleArchive(s.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(s.id)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(s.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(s.id)}>
                                             Активировать
                                         </Button>
                                     )}

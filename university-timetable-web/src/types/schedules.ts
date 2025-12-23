@@ -15,6 +15,11 @@ export interface ScheduleSlotDto {
     weekPattern: WeekPattern;
 }
 
+export interface UnplacedCourseDto {
+    courseId: string;
+    reason: string;
+}
+
 export interface ScheduleSummaryResponse {
     id: UUID;
     semesterCode: string;
@@ -29,7 +34,9 @@ export interface ScheduleResponse {
     semesterCode: string;
     version: number;
     evaluationScore: number | null;
+    evaluationPenalty: number | null;
     createdAt: string;
     updatedAt: string;
     slots: ScheduleSlotDto[];
+    unplaced: UnplacedCourseDto[];
 }

@@ -24,6 +24,35 @@ interface CsvRow {
     rowNumber: number;
 }
 
+type ImportTaskError = {rowNumber: number; message: string};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: ImportTaskError[]}> => {
+    const results: T[] = [];
+    const errors: ImportTaskError[] = [];
+    let i = 0;
+
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e: any) {
+                const rowNumber = Number(e?.rowNumber ?? 0) || 0;
+                const message = String(e?.message ?? e?.body?.message ?? 'ошибка импорта');
+                errors.push({rowNumber, message});
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
+};
+
 export const UsersListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
 
@@ -139,11 +168,7 @@ export const UsersListPage: React.FC = () => {
                         const updatedWithPassword = await usersApi.setPassword(editingId, {
                             newPassword: newPassword,
                         });
-                        setItems(prev =>
-                            prev.map(u =>
-                                u.id === updatedWithPassword.id ? updatedWithPassword : u,
-                            ),
-                        );
+                        setItems(prev => prev.map(u => (u.id === updatedWithPassword.id ? updatedWithPassword : u)));
                     } catch (err) {
                         console.error(err);
                         setFormError('Пользователь обновлён, но пароль не удалось изменить');
@@ -188,9 +213,7 @@ export const UsersListPage: React.FC = () => {
 
         const header = lines[0].split(',').map(h => h.trim());
         if (header.length < 3 || header[0] !== 'login' || header[1] !== 'email' || header[2] !== 'role') {
-            throw new Error(
-                'Ожидаются колонки как минимум: login,email,role[,teacherId,studentId,password]',
-            );
+            throw new Error('Ожидаются колонки как минимум: login,email,role[,teacherId,studentId,password]');
         }
 
         const idx = (name: string) => header.indexOf(name);
@@ -211,12 +234,9 @@ export const UsersListPage: React.FC = () => {
             const login = (parts[idxLogin] ?? '').trim();
             const email = (parts[idxEmail] ?? '').trim();
             const roleRaw = (parts[idxRole] ?? '').trim().toUpperCase() as Role;
-            const teacherId =
-                idxTeacherId >= 0 ? (parts[idxTeacherId] ?? '').trim() || null : null;
-            const studentId =
-                idxStudentId >= 0 ? (parts[idxStudentId] ?? '').trim() || null : null;
-            const password =
-                idxPassword >= 0 ? (parts[idxPassword] ?? '').trim() || null : null;
+            const teacherId = idxTeacherId >= 0 ? (parts[idxTeacherId] ?? '').trim() || null : null;
+            const studentId = idxStudentId >= 0 ? (parts[idxStudentId] ?? '').trim() || null : null;
+            const password = idxPassword >= 0 ? (parts[idxPassword] ?? '').trim() || null : null;
 
             rows.push({
                 login,
@@ -247,38 +267,53 @@ export const UsersListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
-            const errors: string[] = [];
+            const validationErrors: string[] = [];
+            const tasks: Array<() => Promise<UserResponse>> = [];
 
             for (const row of rows) {
                 if (!row.login || !row.email || !row.role) {
-                    errors.push(`Строка ${row.rowNumber}: не заполнены login/email/role`);
+                    validationErrors.push(`Строка ${row.rowNumber}: не заполнены login/email/role`);
                     continue;
                 }
                 if (!['ADMIN', 'TEACHER', 'STUDENT'].includes(row.role)) {
-                    errors.push(`Строка ${row.rowNumber}: некорректная роль "${row.role}"`);
+                    validationErrors.push(`Строка ${row.rowNumber}: некорректная роль "${row.role}"`);
                     continue;
                 }
 
-                try {
-                    const createdRes = await usersApi.create({
-                        login: row.login,
-                        email: row.email,
-                        role: row.role,
-                        password: row.password,
-                        teacherId: row.teacherId,
-                        studentId: row.studentId,
-                    });
-                    success++;
-                    setItems(prev => [...prev, createdRes.user]);
-                } catch (err: any) {
-                    console.error(err);
-                    errors.push(`Строка ${row.rowNumber}: ${err?.body?.message ?? 'ошибка создания'}`);
-                }
+                tasks.push(async () => {
+                    try {
+                        const createdRes = await usersApi.create({
+                            login: row.login,
+                            email: row.email,
+                            role: row.role,
+                            password: row.password,
+                            teacherId: row.teacherId,
+                            studentId: row.studentId,
+                        });
+                        return createdRes.user;
+                    } catch (err: any) {
+                        const msg =
+                            err?.body?.message ??
+                            (typeof err?.message === 'string' ? err.message : null) ??
+                            'ошибка создания';
+                        throw {rowNumber: row.rowNumber, message: msg};
+                    }
+                });
+            }
+
+            const {results: createdUsers, errors: taskErrors} = await runWithLimit(tasks, 8);
+
+            if (createdUsers.length > 0) {
+                setItems(prev => [...prev, ...createdUsers]);
+            }
+
+            const errors: string[] = [...validationErrors];
+            for (const e of taskErrors) {
+                errors.push(`Строка ${e.rowNumber}: ${e.message}`);
             }
 
             const summary = [
-                `Успешно создано: ${success}`,
+                `Успешно создано: ${createdUsers.length}`,
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -322,15 +357,24 @@ export const UsersListPage: React.FC = () => {
         />
     );
 
+    const getUserFio = (u: UserResponse): string => {
+        const anyU = u as any;
+        return (
+            anyU.fullName ??
+            u.teacherName ??
+            u.studentName ??
+            '—'
+        );
+    };
+
     return (
         <Page title="Пользователи" actions={actions}>
-            <CsvMessages error={csvError} result={csvResult}/>
+            <CsvMessages error={csvError} result={csvResult} />
 
             {lastTempPassword && lastTempLogin && (
                 <p className={styles.tempPassword}>
-                    Временный пароль для пользователя <b>{lastTempLogin}</b>:{' '}
-                    <code>{lastTempPassword}</code>
-                    <br/>
+                    Временный пароль для пользователя <b>{lastTempLogin}</b>: <code>{lastTempPassword}</code>
+                    <br />
                     Сохраните и передайте его пользователю, повторно он показан не будет.
                 </p>
             )}
@@ -338,19 +382,11 @@ export const UsersListPage: React.FC = () => {
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Логин">
-                        <Input
-                            value={loginValue}
-                            onChange={e => setLoginValue(e.target.value)}
-                            disabled={formMode === 'edit'}
-                        />
+                        <Input value={loginValue} onChange={e => setLoginValue(e.target.value)} disabled={formMode === 'edit'} />
                     </FormField>
 
                     <FormField label="Email">
-                        <Input
-                            type="email"
-                            value={email}
-                            onChange={e => setEmail(e.target.value)}
-                        />
+                        <Input type="email" value={email} onChange={e => setEmail(e.target.value)} />
                     </FormField>
 
                     <FormField label="Роль">
@@ -372,11 +408,11 @@ export const UsersListPage: React.FC = () => {
                     </FormField>
 
                     <FormField label="Teacher ID (опционально)">
-                        <Input value={teacherId} onChange={e => setTeacherId(e.target.value)}/>
+                        <Input value={teacherId} onChange={e => setTeacherId(e.target.value)} />
                     </FormField>
 
                     <FormField label="Student ID (опционально)">
-                        <Input value={studentId} onChange={e => setStudentId(e.target.value)}/>
+                        <Input value={studentId} onChange={e => setStudentId(e.target.value)} />
                     </FormField>
 
                     <FormField label="Пароль (опционально)">
@@ -411,8 +447,7 @@ export const UsersListPage: React.FC = () => {
                         <th align="left">Email</th>
                         <th align="left">Роль</th>
                         <th align="left">Статус</th>
-                        <th align="left">Преподаватель</th>
-                        <th align="left">Студент</th>
+                        <th align="left">ФИО</th>
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
@@ -423,31 +458,18 @@ export const UsersListPage: React.FC = () => {
                             <td>{u.email}</td>
                             <td>{u.role}</td>
                             <td>{u.status}</td>
-                            <td>{u.teacherName ?? u.teacherId ?? '—'}</td>
-                            <td>{u.studentName ?? u.studentId ?? '—'}</td>
+                            <td>{getUserFio(u)}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(u)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(u)}>
                                         Редактировать
                                     </Button>
                                     {u.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleDeactivate(u.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleDeactivate(u.id)}>
                                             Деактивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(u.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(u.id)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -457,7 +479,7 @@ export const UsersListPage: React.FC = () => {
                     ))}
                     {items.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={isAdmin ? 7 : 6}>Нет пользователей</td>
+                            <td colSpan={isAdmin ? 6 : 5}>Нет пользователей</td>
                         </tr>
                     )}
                     </tbody>

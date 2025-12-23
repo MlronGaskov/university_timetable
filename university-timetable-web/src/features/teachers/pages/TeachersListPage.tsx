@@ -26,6 +26,35 @@ interface CsvRow {
     rowNumber: number;
 }
 
+type ImportTaskError = {rowNumber: number; message: string};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: ImportTaskError[]}> => {
+    const results: T[] = [];
+    const errors: ImportTaskError[] = [];
+    let i = 0;
+
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e: any) {
+                const rowNumber = Number(e?.rowNumber ?? 0) || 0;
+                const message = String(e?.message ?? e?.body?.message ?? 'ошибка импорта');
+                errors.push({rowNumber, message});
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
+};
+
 const dayOptions: { value: DayOfWeek; label: string }[] = [
     {value: 'MONDAY', label: 'Понедельник'},
     {value: 'TUESDAY', label: 'Вторник'},
@@ -155,19 +184,24 @@ export const TeachersListPage: React.FC = () => {
 
         setSaving(true);
         setFormError(null);
+
         try {
             if (formMode === 'create') {
-                const body: CreateTeacherRequest = {
-                    teacherId: teacherId.trim(),
-                    fullName: fullName.trim(),
-                };
+                const body: CreateTeacherRequest = {teacherId: teacherId.trim(), fullName: fullName.trim()};
                 const created = await teachersApi.create(body);
-                setItems(prev => [...prev, created]);
+
+                let finalTeacher = created;
+                try {
+                    finalTeacher = await teachersApi.updateWorkingHours(created.id, {
+                        preferredWorkingHours: getDefaultWorkingHours(),
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+
+                setItems(prev => [...prev, finalTeacher]);
             } else if (formMode === 'edit' && editingId) {
-                const body: UpdateTeacherRequest = {
-                    teacherId: teacherId.trim(),
-                    fullName: fullName.trim(),
-                };
+                const body: UpdateTeacherRequest = {teacherId: teacherId.trim(), fullName: fullName.trim()};
                 const updated = await teachersApi.update(editingId, body);
                 setItems(prev => prev.map(t => (t.id === updated.id ? updated : t)));
             }
@@ -241,29 +275,53 @@ export const TeachersListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
-            const errors: string[] = [];
+            const validationErrors: string[] = [];
+            const tasks: Array<() => Promise<TeacherResponse>> = [];
 
             for (const row of rows) {
                 if (!row.teacherId || !row.fullName) {
-                    errors.push(`Строка ${row.rowNumber}: пустые teacherId или fullName`);
+                    validationErrors.push(`Строка ${row.rowNumber}: пустые teacherId или fullName`);
                     continue;
                 }
-                try {
-                    const created = await teachersApi.create({
-                        teacherId: row.teacherId,
-                        fullName: row.fullName,
-                    });
-                    success++;
-                    setItems(prev => [...prev, created]);
-                } catch (err: any) {
-                    console.error(err);
-                    errors.push(`Строка ${row.rowNumber}: ${err?.body?.message ?? 'ошибка создания'}`);
-                }
+
+                tasks.push(async () => {
+                    try {
+                        const created = await teachersApi.create({
+                            teacherId: row.teacherId,
+                            fullName: row.fullName,
+                        });
+
+                        try {
+                            return await teachersApi.updateWorkingHours(created.id, {
+                                preferredWorkingHours: getDefaultWorkingHours(),
+                            });
+                        } catch (e) {
+                            console.error(e);
+                            return created;
+                        }
+                    } catch (err: any) {
+                        const msg =
+                            err?.body?.message ??
+                            (typeof err?.message === 'string' ? err.message : null) ??
+                            'ошибка создания';
+                        throw {rowNumber: row.rowNumber, message: msg};
+                    }
+                });
+            }
+
+            const {results: createdTeachers, errors: taskErrors} = await runWithLimit(tasks, 8);
+
+            if (createdTeachers.length > 0) {
+                setItems(prev => [...prev, ...createdTeachers]);
+            }
+
+            const errors: string[] = [...validationErrors];
+            for (const e of taskErrors) {
+                errors.push(`Строка ${e.rowNumber}: ${e.message}`);
             }
 
             const summary = [
-                `Успешно создано: ${success}`,
+                `Успешно создано: ${createdTeachers.length}`,
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -310,6 +368,7 @@ export const TeachersListPage: React.FC = () => {
                     <FormField label="ФИО">
                         <Input value={fullName} onChange={e => setFullName(e.target.value)} />
                     </FormField>
+
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
@@ -318,6 +377,7 @@ export const TeachersListPage: React.FC = () => {
                             Отмена
                         </Button>
                     </div>
+
                     {formError && <div className={crudStyles.formError}>{formError}</div>}
                 </form>
             )}
@@ -333,27 +393,19 @@ export const TeachersListPage: React.FC = () => {
 
                     {dayOptions.map(d => {
                         const val =
-                            hours.find(h => h.day === d.value) ?? {
-                                day: d.value,
-                                startTime: '09:00',
-                                endTime: '22:00',
-                            };
+                            hours.find(h => h.day === d.value) ?? {day: d.value, startTime: '09:00', endTime: '22:00'};
                         return (
                             <div key={d.value} className={styles.hoursRow}>
                                 <span>{d.label}</span>
                                 <Input
                                     type="time"
                                     value={val.startTime}
-                                    onChange={e =>
-                                        handleHoursChange(d.value, 'startTime', e.target.value)
-                                    }
+                                    onChange={e => handleHoursChange(d.value, 'startTime', e.target.value)}
                                 />
                                 <Input
                                     type="time"
                                     value={val.endTime}
-                                    onChange={e =>
-                                        handleHoursChange(d.value, 'endTime', e.target.value)
-                                    }
+                                    onChange={e => handleHoursChange(d.value, 'endTime', e.target.value)}
                                 />
                             </div>
                         );
@@ -369,9 +421,9 @@ export const TeachersListPage: React.FC = () => {
                             Отмена
                         </Button>
                     </div>
+
                     <p className={styles.hoursHint}>
-                        По умолчанию задано время 09:00–22:00 с понедельника по субботу (воскресенье не
-                        учитывается).
+                        По умолчанию задано время 09:00–22:00 с понедельника по субботу (воскресенье не учитывается).
                     </p>
                 </form>
             )}
@@ -395,41 +447,21 @@ export const TeachersListPage: React.FC = () => {
                             <td>{t.teacherId}</td>
                             <td>{t.fullName}</td>
                             <td>{t.status}</td>
-                            <td>
-                                {t.preferredWorkingHours && t.preferredWorkingHours.length > 0
-                                    ? 'Заданы'
-                                    : '—'}
-                            </td>
+                            <td>{t.preferredWorkingHours && t.preferredWorkingHours.length > 0 ? 'Заданы' : '—'}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(t)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(t)}>
                                         Редактировать
                                     </Button>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openWorkingHoursForm(t)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openWorkingHoursForm(t)}>
                                         Рабочие часы
                                     </Button>
                                     {t.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleArchive(t.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(t.id)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(t.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(t.id)}>
                                             Активировать
                                         </Button>
                                     )}

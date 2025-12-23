@@ -1,18 +1,18 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Link, useParams} from 'react-router-dom';
 import {Page} from '@/components/layout/Page';
+import {Button} from '@/components/ui/Button';
 import {schedulesApi} from '@/api/schedules';
 import {coursesApi} from '@/api/courses';
 import {teachersApi} from '@/api/teachers';
 import {groupsApi} from '@/api/groups';
 import {roomsApi} from '@/api/rooms';
-import type {ScheduleResponse} from '@/types/schedules';
+import type {ScheduleResponse, UnplacedCourseDto} from '@/types/schedules';
 import type {CourseResponse} from '@/types/courses';
 import type {TeacherResponse} from '@/types/teachers';
 import type {GroupResponse} from '@/types/groups';
 import type {RoomResponse} from '@/types/rooms';
 import {downloadCsv} from '@/utils/csv';
-import {Button} from '@/components/ui/Button';
 import styles from './ScheduleDetailsPage.module.css';
 
 const dayOrder: Record<string, number> = {
@@ -45,10 +45,17 @@ interface EnrichedSlot {
     weekPattern: string;
     validFrom: string;
     validUntil: string;
+
     course: CourseResponse | undefined;
     teacher: TeacherResponse | undefined;
     groups: GroupResponse[];
     room: RoomResponse | undefined;
+}
+
+interface EnrichedUnplaced extends UnplacedCourseDto {
+    course: CourseResponse | undefined;
+    teacher: TeacherResponse | undefined;
+    groups: GroupResponse[];
 }
 
 const norm = (v: string) => v.trim().toLowerCase();
@@ -67,9 +74,8 @@ export const ScheduleDetailsPage: React.FC = () => {
     const [rooms, setRooms] = useState<RoomResponse[]>([]);
 
     const [viewMode, setViewMode] = useState<ViewMode>('ALL');
-
-    const [teacherQuery, setTeacherQuery] = useState<string>('');
-    const [groupQuery, setGroupQuery] = useState<string>('');
+    const [teacherQuery, setTeacherQuery] = useState('');
+    const [groupQuery, setGroupQuery] = useState('');
 
     useEffect(() => {
         if (!scheduleId) return;
@@ -102,10 +108,12 @@ export const ScheduleDetailsPage: React.FC = () => {
                     roomsApi.getAll(),
                 ]);
 
-                const courseCodes = new Set(schedule.slots.map(s => s.courseCode));
-                const filteredCourses = allCourses.filter(c => courseCodes.has(c.code));
+                // ВАЖНО: тянем мету не только для slots, но и для unplaced
+                const codes = new Set<string>();
+                for (const s of schedule.slots) codes.add(s.courseCode);
+                for (const u of schedule.unplaced ?? []) codes.add(u.courseId);
 
-                setCourses(filteredCourses);
+                setCourses(allCourses.filter(c => codes.has(c.code)));
                 setTeachers(allTeachers);
                 setGroups(allGroups);
                 setRooms(allRooms);
@@ -148,6 +156,30 @@ export const ScheduleDetailsPage: React.FC = () => {
             };
         });
     }, [schedule, courses, teachers, groups, rooms]);
+
+    const enrichedUnplaced: EnrichedUnplaced[] = useMemo(() => {
+        if (!schedule) return [];
+        const list = schedule.unplaced ?? [];
+
+        return list.map(u => {
+            const course = courses.find(c => c.code === u.courseId);
+
+            const teacher = course
+                ? teachers.find(t => t.teacherId === course.teacherId)
+                : undefined;
+
+            const courseGroups: GroupResponse[] = course
+                ? groups.filter(g => course.groupCodes.includes(g.code))
+                : [];
+
+            return {
+                ...u,
+                course,
+                teacher,
+                groups: courseGroups,
+            };
+        });
+    }, [schedule, courses, teachers, groups]);
 
     const teacherHints = useMemo(() => {
         const map = new Map<string, TeacherResponse>();
@@ -262,6 +294,7 @@ export const ScheduleDetailsPage: React.FC = () => {
         : 'Расписание';
 
     const isLoading = loadingSchedule || (schedule && loadingMeta);
+    const unplacedCount = schedule?.unplaced?.length ?? 0;
 
     return (
         <Page
@@ -281,9 +314,7 @@ export const ScheduleDetailsPage: React.FC = () => {
         >
             {schedule && (
                 <p className={styles.infoLine}>
-                    Семестр: <code>{schedule.semesterCode}</code> | Версия:{' '}
-                    {schedule.version} | Оценка:{' '}
-                    {schedule.evaluationScore ?? '—'} |{' '}
+                    Семестр: <code>{schedule.semesterCode}</code> | Версия: {schedule.version} |{' '}
                     <Link to={`/semesters/${schedule.semesterCode}/schedules`}>
                         Все версии семестра
                     </Link>
@@ -292,14 +323,39 @@ export const ScheduleDetailsPage: React.FC = () => {
 
             {isLoading && <p>Загрузка расписания…</p>}
 
-            {error && (
-                <p className={styles.error}>
-                    {error}
-                </p>
-            )}
+            {error && <p className={styles.error}>{error}</p>}
 
             {!isLoading && schedule && !error && (
                 <>
+                    {unplacedCount > 0 && (
+                        <section className={styles.warningBox}>
+                            <div className={styles.unplacedTitle}>
+                                Не удалось разместить <b>{unplacedCount}</b> пар(ы)
+                            </div>
+                            <ul className={styles.unplacedList}>
+                                {enrichedUnplaced.map(u => (
+                                    <li key={`${u.courseId}-${u.reason}`} className={styles.unplacedItem}>
+                                        <div>
+                                            <b>{u.course?.code ?? u.courseId}</b>
+                                            {u.course?.title ? ` — ${u.course.title}` : ''}
+                                        </div>
+                                        <div className={styles.unplacedMeta}>
+                                            {u.teacher?.fullName ? (
+                                                <span>Преподаватель: {u.teacher.fullName}</span>
+                                            ) : null}
+                                            {u.groups.length > 0 ? (
+                                                <span>Группы: {u.groups.map(g => g.code).join(', ')}</span>
+                                            ) : null}
+                                        </div>
+                                        <div className={styles.unplacedReason}>
+                                            Причина: {u.reason}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
                     <div className={styles.filtersBar}>
                         <div className={styles.modeBlock}>
                             <span className={styles.modeLabel}>Режим:</span>
@@ -321,7 +377,7 @@ export const ScheduleDetailsPage: React.FC = () => {
 
                         {viewMode === 'TEACHER' && (
                             <div className={styles.modeBlock}>
-                                <span className={styles.modeLabel}>Код препода:</span>
+                                <span className={styles.modeLabel}>Преподаватель:</span>
                                 <input
                                     className={styles.input}
                                     type="text"
@@ -333,10 +389,7 @@ export const ScheduleDetailsPage: React.FC = () => {
                                 />
                                 <datalist id="teacher-hints">
                                     {teacherHints.map(t => (
-                                        <option
-                                            key={t.id}
-                                            value={t.teacherId}
-                                        >
+                                        <option key={t.teacherId} value={t.teacherId}>
                                             {t.fullName}
                                         </option>
                                     ))}
@@ -346,7 +399,7 @@ export const ScheduleDetailsPage: React.FC = () => {
 
                         {viewMode === 'GROUP' && (
                             <div className={styles.modeBlock}>
-                                <span className={styles.modeLabel}>Код группы:</span>
+                                <span className={styles.modeLabel}>Группа:</span>
                                 <input
                                     className={styles.input}
                                     type="text"
@@ -358,10 +411,7 @@ export const ScheduleDetailsPage: React.FC = () => {
                                 />
                                 <datalist id="group-hints">
                                     {groupHints.map(g => (
-                                        <option
-                                            key={g.id}
-                                            value={g.code}
-                                        >
+                                        <option key={g.code} value={g.code}>
                                             {g.name}
                                         </option>
                                     ))}
@@ -376,91 +426,45 @@ export const ScheduleDetailsPage: React.FC = () => {
                         )}
                     </div>
 
-                    {filteredSlots.length === 0 && (
-                        <p>Для выбранных фильтров нет слотов.</p>
-                    )}
+                    {filteredSlots.length === 0 && <p>Для выбранных фильтров нет слотов.</p>}
 
                     {filteredSlots.length > 0 && (
-                        <div className={styles.daysGrid}>
-                            {slotsByDay.map(([day, slots]) => (
-                                <section key={day} className={styles.dayCard}>
+                        <div className={styles.grid}>
+                            {slotsByDay.map(([day, daySlots]) => (
+                                <section key={day} className={styles.dayBlock}>
                                     <header className={styles.dayHeader}>
-                                        <span className={styles.dayLabel}>
-                                            {dayLabel[day] ?? day}
-                                        </span>
-                                        <span className={styles.daySubLabel}>
-                                            {day}
-                                        </span>
+                                        {dayLabel[day] ?? day}
                                     </header>
 
-                                    <ul className={styles.slotsList}>
-                                        {slots.map(s => (
-                                            <li key={s.id} className={styles.slotRow}>
+                                    <div className={styles.slotList}>
+                                        {daySlots.map(s => (
+                                            <div key={s.id} className={styles.slotRow}>
                                                 <div className={styles.slotTime}>
-                                                    {s.startTime.slice(0, 5)}–{s.endTime.slice(0, 5)}
-                                                    {s.weekPattern === 'ODD_WEEKS' && (
-                                                        <span className={styles.weekTag}>нечётные</span>
-                                                    )}
-                                                    {s.weekPattern === 'EVEN_WEEKS' && (
-                                                        <span className={styles.weekTag}>чётные</span>
-                                                    )}
+                                                    {s.startTime}–{s.endTime}
                                                 </div>
 
                                                 <div className={styles.slotMain}>
-                                                    <div className={styles.slotTitle}>
-                                                        {s.course?.code ?? s.course?.id ?? 'Курс'}
-                                                        {s.course?.title && (
-                                                            <span className={styles.slotTitleSecondary}>
-                                                                {' — '}{s.course.title}
-                                                            </span>
-                                                        )}
+                                                    <div>
+                                                        <b>{s.course?.code ?? '—'}</b>
+                                                        {s.course?.title ? ` — ${s.course.title}` : ''}
                                                     </div>
-
-                                                    {s.teacher && (
-                                                        <div className={styles.slotLine}>
-                                                            <span className={styles.label}>Преподаватель:</span>
-                                                            <span>
-                                                                {s.teacher.fullName}{' '}
-                                                                <span className={styles.muted}>
-                                                                    ({s.teacher.teacherId})
-                                                                </span>
-                                                            </span>
-                                                        </div>
-                                                    )}
-
-                                                    {s.groups.length > 0 && (
-                                                        <div className={styles.slotLine}>
-                                                            <span className={styles.label}>Группы:</span>
-                                                            <span>
-                                                                {s.groups
-                                                                    .map(g => `${g.name} (${g.code})`)
-                                                                    .join(', ')}
-                                                            </span>
-                                                        </div>
-                                                    )}
-
-                                                    <div className={styles.slotLine}>
-                                                        <span className={styles.label}>Аудитория:</span>
-                                                        <span>
-                                                            {s.room?.roomCode ?? s.room?.id ?? '—'}
-                                                            {s.room && (
-                                                                <span className={styles.muted}>
-                                                                    {` — ${s.room.building} / ${s.room.number}`}
-                                                                </span>
-                                                            )}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className={styles.slotLine}>
-                                                        <span className={styles.label}>Период:</span>
-                                                        <span className={styles.muted}>
-                                                            {s.validFrom} — {s.validUntil}
-                                                        </span>
+                                                    <div className={styles.slotMeta}>
+                                                        {s.teacher?.fullName
+                                                            ? `Преподаватель: ${s.teacher.fullName}`
+                                                            : s.teacher?.teacherId
+                                                                ? `Преподаватель: ${s.teacher.teacherId}`
+                                                                : null}
+                                                        {s.groups.length > 0
+                                                            ? ` | Группы: ${s.groups.map(g => g.code).join(', ')}`
+                                                            : null}
+                                                        {s.room?.roomCode
+                                                            ? ` | Ауд.: ${s.room.roomCode}`
+                                                            : null}
                                                     </div>
                                                 </div>
-                                            </li>
+                                            </div>
                                         ))}
-                                    </ul>
+                                    </div>
                                 </section>
                             ))}
                         </div>

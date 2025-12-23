@@ -2,8 +2,8 @@ import React, {useEffect, useState} from 'react';
 import {Link} from 'react-router-dom';
 import {Page} from '@/components/layout/Page';
 import {semestersApi} from '@/api/semesters';
-import type {CreateSemesterRequest, SemesterResponse, UpdateSemesterRequest,} from '@/types/semesters';
-import {formatDate, formatInstant} from '@/utils/formatters';
+import type {CreateSemesterRequest, SemesterResponse, UpdateSemesterRequest} from '@/types/semesters';
+import {formatDate} from '@/utils/formatters';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Input} from '@/components/ui/Input';
 import {FormField} from '@/components/ui/FormField';
@@ -25,6 +25,38 @@ interface CsvRow {
     roomCodes: string[];
     rowNumber: number;
 }
+
+type ImportTaskError = {
+    rowNumber: number;
+    message: string;
+};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: ImportTaskError[]}> => {
+    const results: T[] = [];
+    const errors: ImportTaskError[] = [];
+    let i = 0;
+
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e: any) {
+                const rowNumber = Number(e?.rowNumber ?? 0) || 0;
+                const message = String(e?.message ?? e?.body?.message ?? 'ошибка импорта');
+                errors.push({rowNumber, message});
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
+};
 
 const splitCsvLine = (line: string): string[] => {
     const result: string[] = [];
@@ -67,9 +99,7 @@ const parseIdsFromInput = (value: string): string[] =>
 
 const formatIdsToInput = (ids: string[]): string => ids.join(';');
 
-const dateToInstant = (date: string): string => {
-    return new Date(date + 'T00:00:00Z').toISOString();
-};
+const dateToInstant = (date: string): string => new Date(date + 'T00:00:00Z').toISOString();
 
 export const SemestersListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
@@ -160,10 +190,7 @@ export const SemestersListPage: React.FC = () => {
 
         try {
             if (formMode === 'create') {
-                const body: CreateSemesterRequest = {
-                    code: code.trim(),
-                    ...base,
-                };
+                const body: CreateSemesterRequest = {code: code.trim(), ...base};
                 const created = await semestersApi.create(body);
                 setItems(prev => [...prev, created]);
             } else if (formMode === 'edit' && editingId) {
@@ -223,12 +250,7 @@ export const SemestersListPage: React.FC = () => {
         const idxCourseCodes = idx('courseCodes');
         const idxRoomCodes = idx('roomCodes');
 
-        if (
-            idxCode < 0 ||
-            idxStartAt < 0 ||
-            idxEndAt < 0 ||
-            idxPolicyName < 0
-        ) {
+        if (idxCode < 0 || idxStartAt < 0 || idxEndAt < 0 || idxPolicyName < 0) {
             throw new Error(
                 'Ожидаются колонки как минимум: code,startAt,endAt,policyName[,courseCodes,roomCodes]',
             );
@@ -240,30 +262,19 @@ export const SemestersListPage: React.FC = () => {
             if (!rawLine) continue;
             const parts = splitCsvLine(rawLine);
 
-            const safe = (idx: number) => (parts[idx] ?? '').trim();
+            const safe = (idxN: number) => (parts[idxN] ?? '').trim();
 
             const courseCodes: string[] = [];
             if (idxCourseCodes >= 0) {
                 const raw = safe(idxCourseCodes);
-                if (raw) {
-                    raw.split(';')
-                        .map(v => v.trim())
-                        .filter(Boolean)
-                        .forEach(v => courseCodes.push(v));
-                }
+                if (raw) raw.split(';').map(v => v.trim()).filter(Boolean).forEach(v => courseCodes.push(v));
             }
 
             const roomCodes: string[] = [];
             if (idxRoomCodes >= 0) {
                 const raw = safe(idxRoomCodes);
-                if (raw) {
-                    raw.split(';')
-                        .map(v => v.trim())
-                        .filter(Boolean)
-                        .forEach(v => roomCodes.push(v));
-                }
+                if (raw) raw.split(';').map(v => v.trim()).filter(Boolean).forEach(v => roomCodes.push(v));
             }
-            console.log(courseCodes, policyName);
 
             rows.push({
                 code: safe(idxCode),
@@ -294,41 +305,52 @@ export const SemestersListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
-            const errors: string[] = [];
+            const validationErrors: string[] = [];
+            const tasks: Array<() => Promise<SemesterResponse>> = [];
 
             for (const row of rows) {
                 if (!row.code || !row.startAt || !row.endAt || !row.policyName) {
-                    errors.push(
+                    validationErrors.push(
                         `Строка ${row.rowNumber}: не заполнены code/startAt/endAt/policyName`,
                     );
                     continue;
                 }
 
-                try {
-                    const body: CreateSemesterRequest = {
-                        code: row.code,
-                        startAt: row.startAt,
-                        endAt: row.endAt,
-                        policyName: row.policyName,
-                        courseCodes: row.courseCodes,
-                        roomCodes: row.roomCodes,
-                    };
-                    const created = await semestersApi.create(body);
-                    success++;
-                    setItems(prev => [...prev, created]);
-                } catch (err: any) {
-                    console.error(err);
-                    errors.push(
-                        `Строка ${row.rowNumber}: ${
-                            err?.body?.message ?? 'ошибка создания семестра'
-                        }`,
-                    );
-                }
+                tasks.push(async () => {
+                    try {
+                        const body: CreateSemesterRequest = {
+                            code: row.code,
+                            startAt: row.startAt,
+                            endAt: row.endAt,
+                            policyName: row.policyName,
+                            courseCodes: row.courseCodes,
+                            roomCodes: row.roomCodes,
+                        };
+                        return await semestersApi.create(body);
+                    } catch (err: any) {
+                        const msg =
+                            err?.body?.message ??
+                            (typeof err?.message === 'string' ? err.message : null) ??
+                            'ошибка создания семестра';
+                        throw {rowNumber: row.rowNumber, message: msg};
+                    }
+                });
+            }
+
+            const {results: createdSemesters, errors: taskErrors} = await runWithLimit(tasks, 8);
+
+            if (createdSemesters.length > 0) {
+                setItems(prev => [...prev, ...createdSemesters]);
+            }
+
+            const errors: string[] = [...validationErrors];
+            for (const e of taskErrors) {
+                if (e.rowNumber) errors.push(`Строка ${e.rowNumber}: ${e.message}`);
+                else errors.push(e.message);
             }
 
             const summary = [
-                `Успешно создано семестров: ${success}`,
+                `Успешно создано семестров: ${createdSemesters.length}`,
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -347,17 +369,7 @@ export const SemestersListPage: React.FC = () => {
     const exportCsv = () => {
         downloadCsv(
             'semesters.csv',
-            [
-                'code',
-                'startAt',
-                'endAt',
-                'status',
-                'policyName',
-                'courseCodes',
-                'roomCodes',
-                'createdAt',
-                'updatedAt',
-            ],
+            ['code', 'startAt', 'endAt', 'status', 'policyName', 'courseCodes', 'roomCodes', 'createdAt', 'updatedAt'],
             items.map(s => [
                 s.code,
                 s.startAt,
@@ -385,35 +397,24 @@ export const SemestersListPage: React.FC = () => {
 
     return (
         <Page title="Семестры" actions={actions}>
-            <CsvMessages error={csvError} result={csvResult}/>
+            <CsvMessages error={csvError} result={csvResult} />
 
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Код">
-                        <Input value={code} onChange={e => setCode(e.target.value)}/>
+                        <Input value={code} onChange={e => setCode(e.target.value)} />
                     </FormField>
 
                     <FormField label="Начало (YYYY-MM-DD)">
-                        <Input
-                            type="date"
-                            value={startDate}
-                            onChange={e => setStartDate(e.target.value)}
-                        />
+                        <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
                     </FormField>
 
                     <FormField label="Конец (YYYY-MM-DD)">
-                        <Input
-                            type="date"
-                            value={endDate}
-                            onChange={e => setEndDate(e.target.value)}
-                        />
+                        <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
                     </FormField>
 
                     <FormField label="Имя политики">
-                        <Input
-                            value={policyName}
-                            onChange={e => setPolicyName(e.target.value)}
-                        />
+                        <Input value={policyName} onChange={e => setPolicyName(e.target.value)} />
                     </FormField>
 
                     <FormField label="Коды курсов (через ; или перенос строки)">
@@ -436,25 +437,18 @@ export const SemestersListPage: React.FC = () => {
 
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
-                            {saving
-                                ? 'Сохранение…'
-                                : formMode === 'create'
-                                    ? 'Создать'
-                                    : 'Сохранить'}
+                            {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
                     </div>
 
-                    {formError && (
-                        <div className={crudStyles.formError}>{formError}</div>
-                    )}
+                    {formError && <div className={crudStyles.formError}>{formError}</div>}
 
                     <p className={styles.hint}>
-                        Поле <code>policyName</code> должно совпадать с именем политики
-                        (Policy.name). Курсы привязываются по их уникальному коду
-                        <code> Course.code </code>.
+                        Поле <code>policyName</code> должно совпадать с именем политики (Policy.name).
+                        Курсы привязываются по их уникальному коду <code>Course.code</code>.
                     </p>
                 </form>
             )}
@@ -466,14 +460,10 @@ export const SemestersListPage: React.FC = () => {
                     <thead>
                     <tr>
                         <th align="left">Код</th>
-                        <th align="left">Начало</th>
-                        <th align="left">Конец</th>
                         <th align="left">Политика</th>
                         <th align="left">Курсов</th>
                         <th align="left">Аудиторий</th>
-                        <th align="left">Статус</th>
                         <th align="left">Расписания</th>
-                        <th align="left">Обновлено</th>
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
@@ -481,39 +471,23 @@ export const SemestersListPage: React.FC = () => {
                     {items.map(s => (
                         <tr key={s.id}>
                             <td>{s.code}</td>
-                            <td>{formatDate(s.startAt)}</td>
-                            <td>{formatDate(s.endAt)}</td>
                             <td>{s.policyName}</td>
                             <td>{s.courseCodes?.length ?? 0}</td>
                             <td>{s.roomCodes?.length ?? 0}</td>
-                            <td>{s.status}</td>
                             <td>
                                 <Link to={`/semesters/${s.code}/schedules`}>Открыть</Link>
                             </td>
-                            <td>{formatInstant(s.updatedAt)}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(s)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(s)}>
                                         Редактировать
                                     </Button>
                                     {s.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleArchive(s.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(s.id)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(s.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(s.id)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -523,7 +497,7 @@ export const SemestersListPage: React.FC = () => {
                     ))}
                     {items.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={isAdmin ? 10 : 9}>Нет семестров</td>
+                            <td colSpan={isAdmin ? 6 : 5}>Нет семестров</td>
                         </tr>
                     )}
                     </tbody>

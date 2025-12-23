@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {roomsApi} from '@/api/rooms';
 import type {
@@ -52,6 +52,73 @@ const splitCsvLine = (line: string): string[] => {
     }
     result.push(current);
     return result;
+};
+
+const parseCsv = (text: string): CsvRow[] => {
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const header = splitCsvLine(lines[0]).map(h => h.trim());
+    const idx = (name: string) => header.indexOf(name);
+
+    const idxRoomCode = idx('roomCode');
+    const idxBuilding = idx('building');
+    const idxNumber = idx('number');
+    const idxCapacity = idx('capacity');
+    const idxItemsJson = idx('itemsJson');
+
+    if (idxRoomCode < 0 || idxBuilding < 0 || idxNumber < 0 || idxCapacity < 0) {
+        throw new Error(
+            'Ожидаются колонки как минимум: roomCode,building,number,capacity[,itemsJson]',
+        );
+    }
+
+    const rows: CsvRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+        const rawLine = lines[i].trim();
+        if (!rawLine) continue;
+
+        const parts = splitCsvLine(rawLine);
+        const safe = (idxN: number) => (parts[idxN] ?? '').trim();
+
+        const cap = Number.parseInt(safe(idxCapacity), 10);
+
+        rows.push({
+            roomCode: safe(idxRoomCode),
+            building: safe(idxBuilding),
+            number: safe(idxNumber),
+            capacity: cap,
+            itemsJson: idxItemsJson >= 0 ? safe(idxItemsJson) || null : null,
+            rowNumber: i + 1,
+        });
+    }
+
+    return rows;
+};
+
+const runWithLimit = async <T,>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+): Promise<{results: T[]; errors: any[]}> => {
+    const results: T[] = [];
+    const errors: any[] = [];
+    let i = 0;
+
+    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
+        while (true) {
+            const idx = i++;
+            if (idx >= tasks.length) return;
+            try {
+                const r = await tasks[idx]();
+                results.push(r);
+            } catch (e) {
+                errors.push(e);
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return {results, errors};
 };
 
 export const RoomsListPage: React.FC = () => {
@@ -155,10 +222,10 @@ export const RoomsListPage: React.FC = () => {
             return;
         }
 
-        const normalizedItems: RoomItemDto[] = roomItems
+        const normalizedItems: RoomItemDto[] = (roomItems ?? [])
             .map(it => ({
-                name: it.name.trim(),
-                quantity: Number.parseInt(String(it.quantity), 10),
+                name: String(it.name ?? '').trim(),
+                quantity: Number.parseInt(String(it.quantity ?? '0'), 10),
             }))
             .filter(it => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
 
@@ -218,56 +285,23 @@ export const RoomsListPage: React.FC = () => {
         }
     };
 
-    const formatItemsSummary = (its: RoomItemDto[]): string => {
+    const itemsTitle = (its: RoomItemDto[]): string => {
         if (!its || its.length === 0) return '—';
-        return its.map(i => `${i.name}×${i.quantity}`).join(', ');
+        return its.map(i => `${i.name}×${i.quantity}`).join('\n');
     };
 
-    const parseCsv = (text: string): CsvRow[] => {
-        const lines = text.trim().split(/\r?\n/);
-        if (lines.length < 2) return [];
-
-        const header = splitCsvLine(lines[0]).map(h => h.trim());
-        const idx = (name: string) => header.indexOf(name);
-
-        const idxRoomCode = idx('roomCode');
-        const idxBuilding = idx('building');
-        const idxNumber = idx('number');
-        const idxCapacity = idx('capacity');
-        const idxItemsJson = idx('itemsJson');
-
-        if (
-            idxRoomCode < 0 ||
-            idxBuilding < 0 ||
-            idxNumber < 0 ||
-            idxCapacity < 0
-        ) {
-            throw new Error(
-                'Ожидаются колонки как минимум: roomCode,building,number,capacity[,itemsJson]',
-            );
-        }
-
-        const rows: CsvRow[] = [];
-        for (let i = 1; i < lines.length; i++) {
-            const rawLine = lines[i].trim();
-            if (!rawLine) continue;
-            const parts = splitCsvLine(rawLine);
-
-            const safe = (idx: number) => (parts[idx] ?? '').trim();
-
-            const capStr = safe(idxCapacity);
-            const cap = Number.parseInt(capStr, 10);
-
-            rows.push({
-                roomCode: safe(idxRoomCode),
-                building: safe(idxBuilding),
-                number: safe(idxNumber),
-                capacity: cap,
-                itemsJson: idxItemsJson >= 0 ? safe(idxItemsJson) || null : null,
-                rowNumber: i + 1,
-            });
-        }
-        return rows;
+    const renderItems = (its: RoomItemDto[]) => {
+        if (!its || its.length === 0) return '—';
+        return (
+            <div title={itemsTitle(its)}>
+                {its.map((i, idx) => (
+                    <React.Fragment key={`${i.name}-${idx}`}>
+                        {i.name}×{i.quantity}
+                        {idx < its.length - 1 ? <br /> : null}
+                    </React.Fragment>
+                ))}
+            </div>
+        );
     };
 
     const importFromFile = async (file: File) => {
@@ -286,8 +320,8 @@ export const RoomsListPage: React.FC = () => {
                 return;
             }
 
-            let success = 0;
-            const errors: string[] = [];
+            const validationErrors: string[] = [];
+            const createTasks: Array<() => Promise<RoomResponse>> = [];
 
             for (const row of rows) {
                 if (
@@ -297,7 +331,7 @@ export const RoomsListPage: React.FC = () => {
                     !Number.isFinite(row.capacity) ||
                     row.capacity <= 0
                 ) {
-                    errors.push(
+                    validationErrors.push(
                         `Строка ${row.rowNumber}: не заполнены roomCode/building/number или некорректная capacity`,
                     );
                     continue;
@@ -311,55 +345,47 @@ export const RoomsListPage: React.FC = () => {
                             parsedItems = raw
                                 .map((it: any) => ({
                                     name: String(it?.name ?? '').trim(),
-                                    quantity: Number.parseInt(
-                                        String(it?.quantity ?? '0'),
-                                        10,
-                                    ),
+                                    quantity: Number.parseInt(String(it?.quantity ?? '0'), 10),
                                 }))
-                                .filter(
-                                    it =>
-                                        it.name &&
-                                        Number.isFinite(it.quantity) &&
-                                        it.quantity > 0,
-                                );
+                                .filter(it => it.name && Number.isFinite(it.quantity) && it.quantity > 0);
                         } else {
-                            errors.push(
+                            validationErrors.push(
                                 `Строка ${row.rowNumber}: itemsJson должен быть массивом`,
                             );
                         }
                     } catch (err) {
                         console.error(err);
-                        errors.push(
+                        validationErrors.push(
                             `Строка ${row.rowNumber}: ошибка парсинга itemsJson`,
                         );
                     }
                 }
 
-                try {
-                    const created = await roomsApi.create({
+                createTasks.push(async () => {
+                    const body: CreateRoomRequest = {
                         roomCode: row.roomCode,
                         building: row.building,
                         number: row.number,
                         capacity: row.capacity,
-                        items:
-                            parsedItems && parsedItems.length > 0
-                                ? parsedItems
-                                : undefined,
-                    });
-                    success++;
-                    setItems(prev => [...prev, created]);
-                } catch (err: any) {
-                    console.error(err);
-                    errors.push(
-                        `Строка ${row.rowNumber}: ${
-                            err?.body?.message ?? 'ошибка создания аудитории'
-                        }`,
-                    );
-                }
+                        items: parsedItems && parsedItems.length > 0 ? parsedItems : undefined,
+                    };
+                    return await roomsApi.create(body);
+                });
+            }
+
+            const {results: created, errors: createErrors} = await runWithLimit(createTasks, 8);
+
+            if (created.length > 0) {
+                setItems(prev => [...prev, ...created]);
+            }
+
+            const errors: string[] = [...validationErrors];
+            for (const e of createErrors) {
+                errors.push(e?.body?.message ?? 'ошибка создания аудитории');
             }
 
             const summary = [
-                `Успешно создано аудиторий: ${success}`,
+                `Успешно создано аудиторий: ${created.length}`,
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -401,15 +427,18 @@ export const RoomsListPage: React.FC = () => {
         );
     };
 
-    const actions = (
-        <CsvToolbar
-            onExport={exportCsv}
-            onImportFile={importFromFile}
-            importDisabled={csvProcessing}
-            showCreate={isAdmin}
-            createLabel="Создать аудиторию"
-            onCreate={openCreateForm}
-        />
+    const actions = useMemo(
+        () => (
+            <CsvToolbar
+                onExport={exportCsv}
+                onImportFile={importFromFile}
+                importDisabled={csvProcessing}
+                showCreate={isAdmin}
+                createLabel="Создать аудиторию"
+                onCreate={openCreateForm}
+            />
+        ),
+        [csvProcessing, isAdmin, items],
     );
 
     return (
@@ -419,22 +448,13 @@ export const RoomsListPage: React.FC = () => {
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Код аудитории">
-                        <Input
-                            value={roomCode}
-                            onChange={e => setRoomCode(e.target.value)}
-                        />
+                        <Input value={roomCode} onChange={e => setRoomCode(e.target.value)} />
                     </FormField>
                     <FormField label="Корпус">
-                        <Input
-                            value={building}
-                            onChange={e => setBuilding(e.target.value)}
-                        />
+                        <Input value={building} onChange={e => setBuilding(e.target.value)} />
                     </FormField>
                     <FormField label="Номер">
-                        <Input
-                            value={number}
-                            onChange={e => setNumber(e.target.value)}
-                        />
+                        <Input value={number} onChange={e => setNumber(e.target.value)} />
                     </FormField>
                     <FormField label="Вместимость">
                         <Input
@@ -447,30 +467,20 @@ export const RoomsListPage: React.FC = () => {
 
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
-                            {saving
-                                ? 'Сохранение…'
-                                : formMode === 'create'
-                                    ? 'Создать'
-                                    : 'Сохранить'}
+                            {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
                     </div>
 
-                    {formError && (
-                        <div className={crudStyles.formError}>{formError}</div>
-                    )}
+                    {formError && <div className={crudStyles.formError}>{formError}</div>}
 
                     <div className={styles.itemsBlock}>
                         <div className={styles.itemsHeader}>
                             <strong>Оборудование аудитории</strong>
                             {roomItems.length > 0 && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => setRoomItems([])}
-                                >
+                                <Button type="button" variant="ghost" onClick={() => setRoomItems([])}>
                                     Очистить
                                 </Button>
                             )}
@@ -481,49 +491,30 @@ export const RoomsListPage: React.FC = () => {
                                 <Input
                                     placeholder="Название (проектор, доска…)"
                                     value={it.name}
-                                    onChange={e =>
-                                        handleItemChange(idx, 'name', e.target.value)
-                                    }
+                                    onChange={e => handleItemChange(idx, 'name', e.target.value)}
                                 />
                                 <Input
                                     type="number"
                                     min={1}
                                     placeholder="Кол-во"
-                                    value={
-                                        it.quantity ? String(it.quantity) : ''
-                                    }
-                                    onChange={e =>
-                                        handleItemChange(
-                                            idx,
-                                            'quantity',
-                                            e.target.value,
-                                        )
-                                    }
+                                    value={it.quantity ? String(it.quantity) : ''}
+                                    onChange={e => handleItemChange(idx, 'quantity', e.target.value)}
                                 />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    onClick={() => handleRemoveItem(idx)}
-                                >
+                                <Button type="button" variant="ghost" onClick={() => handleRemoveItem(idx)}>
                                     Удалить
                                 </Button>
                             </div>
                         ))}
 
                         <div className={styles.itemsFooter}>
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={handleAddItem}
-                            >
+                            <Button type="button" variant="secondary" onClick={handleAddItem}>
                                 Добавить оборудование
                             </Button>
                         </div>
 
                         <p className={styles.itemsHint}>
-                            Оборудование используется при подборе подходящих аудиторий
-                            для курсов. В CSV колонка <code>itemsJson</code> содержит
-                            JSON-массив объектов <code>{"{name, quantity}"}</code>.
+                            Оборудование используется при подборе подходящих аудиторий для курсов. В CSV колонка{' '}
+                            <code>itemsJson</code> содержит JSON-массив объектов <code>{'{name, quantity}'}</code>.
                         </p>
                     </div>
                 </form>
@@ -536,11 +527,9 @@ export const RoomsListPage: React.FC = () => {
                     <thead>
                     <tr>
                         <th align="left">Код</th>
-                        <th align="left">Корпус</th>
-                        <th align="left">Номер</th>
+                        <th align="left">Аудитория</th>
                         <th align="left">Вместимость</th>
                         <th align="left">Оборудование</th>
-                        <th align="left">Статус</th>
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
@@ -548,41 +537,20 @@ export const RoomsListPage: React.FC = () => {
                     {items.map(r => (
                         <tr key={r.id}>
                             <td>{r.roomCode}</td>
-                            <td>{r.building}</td>
-                            <td>{r.number}</td>
+                            <td>{r.building} {r.number}</td>
                             <td>{r.capacity}</td>
-                            <td>
-                                <span
-                                    className={styles.itemsSummary}
-                                    title={formatItemsSummary(r.items ?? [])}
-                                >
-                                    {formatItemsSummary(r.items ?? [])}
-                                </span>
-                            </td>
-                            <td>{r.status}</td>
+                            <td className={styles.itemsSummary}>{renderItems(r.items ?? [])}</td>
                             {isAdmin && (
                                 <ActionsCell>
-                                    <Button
-                                        variant="ghost"
-                                        type="button"
-                                        onClick={() => openEditForm(r)}
-                                    >
+                                    <Button variant="ghost" type="button" onClick={() => openEditForm(r)}>
                                         Редактировать
                                     </Button>
                                     {r.status === 'ACTIVE' ? (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleArchive(r.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(r.id)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button
-                                            variant="ghost"
-                                            type="button"
-                                            onClick={() => handleActivate(r.id)}
-                                        >
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(r.id)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -592,7 +560,7 @@ export const RoomsListPage: React.FC = () => {
                     ))}
                     {items.length === 0 && !loading && (
                         <tr>
-                            <td colSpan={isAdmin ? 7 : 6}>Нет аудиторий</td>
+                            <td colSpan={isAdmin ? 5 : 4}>Нет аудиторий</td>
                         </tr>
                     )}
                     </tbody>

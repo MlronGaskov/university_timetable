@@ -36,7 +36,7 @@ public class PrologSolverClient {
         // Log the request for debugging
         try {
             String jsonRequest = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(request);
-            log.info("Sending request to solver:\n{}", jsonRequest);
+            log.debug("Sending request to solver:\n{}", jsonRequest);
         } catch (Exception e) {
             log.warn("Could not serialize request for logging", e);
         }

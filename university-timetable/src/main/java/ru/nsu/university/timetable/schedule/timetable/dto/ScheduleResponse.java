@@ -9,8 +9,10 @@ public record ScheduleResponse(
         String semesterCode,
         int version,
         Double evaluationScore,
+        Double evaluationPenalty,
         Instant createdAt,
         Instant updatedAt,
-        List<ScheduleSlotDto> slots
+        List<ScheduleSlotDto> slots,
+        List<UnplacedCourseDto> unplaced
 ) {
 }

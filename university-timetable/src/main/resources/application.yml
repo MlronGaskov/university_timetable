@@ -10,6 +10,8 @@ spring:
       hibernate:
         format_sql: true
   jackson:
+    deserialization:
+      FAIL_ON_UNKNOWN_PROPERTIES: false
     serialization:
       WRITE_DATES_AS_TIMESTAMPS: false
 
@@ -24,4 +26,4 @@ app:
 
 logging:
   level:
-    org.springframework.security: DEBUG
+    org.springframework.security: INFO

@@ -15,6 +15,7 @@ import ru.nsu.university.timetable.schedule.semester.SemesterRepository;
 import ru.nsu.university.timetable.schedule.timetable.dto.ScheduleResponse;
 import ru.nsu.university.timetable.schedule.timetable.dto.ScheduleSlotDto;
 import ru.nsu.university.timetable.schedule.timetable.dto.ScheduleSummaryResponse;
+import ru.nsu.university.timetable.schedule.timetable.dto.UnplacedCourseDto;
 import ru.nsu.university.timetable.solver.PrologSolverClient;
 import ru.nsu.university.timetable.solver.dto.SolverRequest;
 import ru.nsu.university.timetable.solver.dto.SolverResponse;
@@ -69,17 +70,8 @@ public class ScheduleService {
                     .orElse(1);
 
             SolverRequest solverRequest = buildSolverRequest(semester);
-            log.info("Calling solver for semester={} with {} courses, {} rooms, {} teachers",
-                    semesterCode,
-                    solverRequest.courses().size(),
-                    solverRequest.rooms().size(),
-                    solverRequest.teachers().size());
 
             SolverResponse solverResponse = solverClient.solve(solverRequest);
-
-            log.info("Solver returned {} slots with score={}",
-                    solverResponse.slots().size(),
-                    solverResponse.evaluationScore());
 
             Schedule schedule = Schedule.builder()
                     .semester(semester)
@@ -103,7 +95,14 @@ public class ScheduleService {
             });
 
             Schedule saved = scheduleRepository.save(schedule);
-            return toDetailsDto(saved);
+
+            List<UnplacedCourseDto> unplaced = Optional.ofNullable(solverResponse.unplaced())
+                    .orElse(List.of())
+                    .stream()
+                    .map(u -> new UnplacedCourseDto(u.courseId(), u.reason()))
+                    .toList();
+
+            return toDetailsDto(saved, unplaced, solverResponse.evaluationPenalty());
         } catch (Exception ex) {
             log.error("Error while generating schedule for semesterCode={}", semesterCode, ex);
             throw ex;
@@ -122,6 +121,10 @@ public class ScheduleService {
     }
 
     private ScheduleResponse toDetailsDto(Schedule s) {
+        return toDetailsDto(s, List.of(), null);
+    }
+
+    private ScheduleResponse toDetailsDto(Schedule s, List<UnplacedCourseDto> unplaced, Double penalty) {
         List<ScheduleSlotDto> slots = s.getSlots().stream()
                 .map(slot -> new ScheduleSlotDto(
                         slot.getId(),
@@ -141,18 +144,18 @@ public class ScheduleService {
                 s.getSemester().getCode(),
                 s.getVersion(),
                 s.getEvaluationScore(),
+                penalty,
                 s.getCreatedAt(),
                 s.getUpdatedAt(),
-                slots
+                slots,
+                unplaced
         );
     }
 
     private SolverRequest buildSolverRequest(Semester semester) {
-        // Загружаем Policy
         Policy policy = policyRepository.findByNameIgnoreCase(semester.getPolicyName())
                 .orElseThrow(() -> new IllegalArgumentException("Policy not found: " + semester.getPolicyName()));
 
-        // Загружаем курсы по кодам из семестра
         List<SolverRequest.CourseDto> courseDtos = new ArrayList<>();
         Set<String> teacherIds = new HashSet<>();
 
@@ -176,7 +179,6 @@ public class ScheduleService {
             ));
         }
 
-        // Загружаем комнаты по кодам из семестра
         List<SolverRequest.RoomDto> roomDtos = new ArrayList<>();
         for (String roomCode : semester.getRoomCodes()) {
             Room room = roomRepository.findByRoomCodeIgnoreCase(roomCode)
@@ -193,7 +195,6 @@ public class ScheduleService {
             ));
         }
 
-        // Загружаем преподавателей, которые ведут курсы
         List<SolverRequest.TeacherDto> teacherDtos = new ArrayList<>();
         for (String teacherId : teacherIds) {
             Teacher teacher = teacherRepository.findByTeacherId(teacherId)
@@ -213,7 +214,6 @@ public class ScheduleService {
             ));
         }
 
-        // Формируем Policy DTO
         SolverRequest.PolicyDto policyDto = new SolverRequest.PolicyDto(
                 policy.getId().toString(),
                 policy.getGridJson(),
@@ -223,7 +223,6 @@ public class ScheduleService {
                 policy.getWeightsJson()
         );
 
-        // Формируем Semester DTO
         SolverRequest.SemesterDto semesterDto = new SolverRequest.SemesterDto(
                 semester.getId().toString(),
                 semester.getStartAt(),
