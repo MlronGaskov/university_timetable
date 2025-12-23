@@ -1,0 +1,15 @@
+code,title,teacher_id,planned_hours,required_room_capacity,status
+ALG,"Алгоритмы и структуры данных",IVANOV_AS,4,60,ACTIVE
+ALG-P,"Практикум по алгоритмам",SMIRNOVA_EV,2,40,ACTIVE
+LA,"Линейная алгебра",PETROVA_MV,4,60,ACTIVE
+LA-P,"Семинар по линейной алгебре",PETROVA_MV,2,40,ACTIVE
+PROG-C,"Программирование на C",SIDOROV_IP,4,40,ACTIVE
+OS,"Операционные системы",KUZNETSOV_DA,4,60,ACTIVE
+OS-L,"Лабораторный практикум по ОС",KUZNETSOV_DA,2,20,ACTIVE
+ML,"Введение в машинное обучение",VOLKOVA_OA,4,60,ACTIVE
+ML-P,"Практикум по машинному обучению",VOLKOVA_OA,2,40,ACTIVE
+MATH-AN,"Математический анализ",IVANOV_AS,4,60,ACTIVE
+DISCR,"Дискретная математика",PETROVA_MV,4,60,ACTIVE
+DB,"Базы данных",KUZNETSOV_DA,4,40,ACTIVE
+NET-INTRO,"Введение в компьютерные сети",SIDOROV_IP,4,40,ACTIVE
+CODE-INTRO,"Введение в теорию кодирования",VOLKOVA_OA,4,40,ACTIVE

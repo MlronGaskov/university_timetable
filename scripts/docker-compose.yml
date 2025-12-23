@@ -12,6 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/csv:/docker-entrypoint-initdb.d/csv:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d university_timetable"]
       interval: 5s

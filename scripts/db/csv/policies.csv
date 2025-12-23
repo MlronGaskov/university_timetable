@@ -1,0 +1,2 @@
+name,grid_json,breaks_json,limits_json,travel_matrix_json,weights_json
+default-policy,"{""days"":[""MONDAY"",""TUESDAY"",""WEDNESDAY"",""THURSDAY"",""FRIDAY"",""SATURDAY""],""slots"":[{""start"":""09:00"",""end"":""10:35""},{""start"":""10:50"",""end"":""12:25""},{""start"":""12:40"",""end"":""14:15""},{""start"":""14:30"",""end"":""16:05""},{""start"":""16:20"",""end"":""17:55""},{""start"":""18:10"",""end"":""19:45""}],""weekPattern"":""EVERY_WEEK""}","[]","{}","{}","{}"
