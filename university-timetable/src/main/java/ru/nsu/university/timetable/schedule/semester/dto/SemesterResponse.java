@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record SemesterResponse(
         UUID id,
+        long version,
         String code,
         Instant startAt,
         Instant endAt,

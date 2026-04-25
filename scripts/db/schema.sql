@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS teachers
 (
     id         UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version    BIGINT       NOT NULL DEFAULT 0,
     teacher_id VARCHAR(64)  NOT NULL,
     full_name  VARCHAR(128) NOT NULL,
     status     VARCHAR(16)  NOT NULL,
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS teachers
 CREATE TABLE IF NOT EXISTS students
 (
     id         UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version    BIGINT       NOT NULL DEFAULT 0,
     full_name  VARCHAR(128) NOT NULL,
     student_id VARCHAR(64)  NOT NULL,
     status     VARCHAR(16)  NOT NULL,
@@ -27,6 +29,7 @@ CREATE TABLE IF NOT EXISTS students
 CREATE TABLE IF NOT EXISTS groups
 (
     id         UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version    BIGINT       NOT NULL DEFAULT 0,
     name       VARCHAR(128) NOT NULL,
     code       VARCHAR(64)  NOT NULL,
     size       INTEGER      NOT NULL,
@@ -50,6 +53,7 @@ CREATE TABLE IF NOT EXISTS group_students
 CREATE TABLE IF NOT EXISTS rooms
 (
     id         UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    version    BIGINT      NOT NULL DEFAULT 0,
     code       VARCHAR(64) NOT NULL,
     building   VARCHAR(64) NOT NULL,
     number     VARCHAR(64) NOT NULL,
@@ -75,6 +79,7 @@ CREATE TABLE IF NOT EXISTS room_items
 CREATE TABLE IF NOT EXISTS policies
 (
     id                 UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version            BIGINT       NOT NULL DEFAULT 0,
     name               VARCHAR(128) NOT NULL,
     grid_json          TEXT         NOT NULL,
     breaks_json        TEXT         NOT NULL,
@@ -89,6 +94,7 @@ CREATE TABLE IF NOT EXISTS policies
 CREATE TABLE IF NOT EXISTS users
 (
     id            UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version       BIGINT       NOT NULL DEFAULT 0,
     login         VARCHAR(64)  NOT NULL,
     email         VARCHAR(128) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -124,6 +130,7 @@ CREATE TABLE IF NOT EXISTS teacher_working_hours
 CREATE TABLE IF NOT EXISTS courses
 (
     id                     UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version                BIGINT       NOT NULL DEFAULT 0,
     code                   VARCHAR(64)  NOT NULL,
     title                  VARCHAR(256) NOT NULL,
     teacher_id             VARCHAR(64)  NOT NULL,
@@ -163,6 +170,7 @@ CREATE TABLE IF NOT EXISTS course_items
 CREATE TABLE IF NOT EXISTS semesters
 (
     id          UUID PRIMARY KEY      DEFAULT gen_random_uuid(),
+    version     BIGINT       NOT NULL DEFAULT 0,
     code        VARCHAR(64)  NOT NULL,
     start_at    TIMESTAMPTZ  NOT NULL,
     end_at      TIMESTAMPTZ  NOT NULL,

@@ -21,6 +21,7 @@ export interface UserResponse {
     teacherName: string | null;
     studentId: string | null;
     studentName: string | null;
+    version: number;
     createdAt: string;
     updatedAt: string;
 }

@@ -3,9 +3,18 @@ const API_BASE_URL =
 
 let authToken: string | null = null;
 
+export type ApiError = Error & {
+    status?: number;
+    body?: unknown;
+};
+
 export const setAuthToken = (token: string | null) => {
     authToken = token;
 };
+
+export const ifMatchHeaders = (version: number): HeadersInit => ({
+    'If-Match': String(version),
+});
 
 export async function http<T>(
     path: string,
@@ -13,13 +22,14 @@ export async function http<T>(
 ): Promise<T> {
     const url = API_BASE_URL + path;
 
-    const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        ...(options.headers || {}),
-    };
+    const headers = new Headers(options.headers);
+
+    if (!headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
 
     if (authToken) {
-        (headers as any).Authorization = `Bearer ${authToken}`;
+        headers.set('Authorization', `Bearer ${authToken}`);
     }
 
     const response = await fetch(url, {
@@ -29,6 +39,7 @@ export async function http<T>(
 
     if (!response.ok) {
         let errorBody: unknown = null;
+
         try {
             errorBody = await response.json();
         } catch {
@@ -41,9 +52,11 @@ export async function http<T>(
 
         const error = new Error(
             `HTTP ${response.status} ${response.statusText} for ${path}`
-        ) as Error & { status?: number; body?: unknown };
+        ) as ApiError;
+
         error.status = response.status;
         error.body = errorBody;
+
         throw error;
     }
 

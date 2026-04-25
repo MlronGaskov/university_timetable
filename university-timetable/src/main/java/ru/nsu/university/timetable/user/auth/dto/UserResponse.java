@@ -4,9 +4,11 @@ import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.user.auth.Role;
 
 import java.time.Instant;
+import java.util.UUID;
 
 public record UserResponse(
-        java.util.UUID id,
+        UUID id,
+        long version,
         String login,
         String email,
         Status status,

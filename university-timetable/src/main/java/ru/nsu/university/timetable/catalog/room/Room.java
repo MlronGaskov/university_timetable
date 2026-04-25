@@ -37,6 +37,10 @@ public class Room {
     @GeneratedValue
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(name = "code", nullable = false, length = 64)
     private String roomCode;
 

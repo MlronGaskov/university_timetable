@@ -31,6 +31,12 @@ interface CsvRow {
     rowNumber: number;
 }
 
+const CONFLICT_MESSAGE =
+    'Курс уже был изменён другим пользователем. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию курса. Обновите страницу и повторите попытку.';
+
 const splitCsvLine = (line: string): string[] => {
     const result: string[] = [];
     let current = '';
@@ -53,6 +59,7 @@ const splitCsvLine = (line: string): string[] => {
             current += ch;
         }
     }
+
     result.push(current);
     return result;
 };
@@ -78,11 +85,12 @@ const parseCsv = (text: string): CsvRow[] => {
     }
 
     const rows: CsvRow[] = [];
+
     for (let i = 1; i < lines.length; i++) {
         const rawLine = lines[i].trim();
         if (!rawLine) continue;
-        const parts = splitCsvLine(rawLine);
 
+        const parts = splitCsvLine(rawLine);
         const safe = (idxN: number) => (parts[idxN] ?? '').trim();
 
         const hoursStr = safe(idxPlannedHours);
@@ -109,32 +117,8 @@ const parseCsv = (text: string): CsvRow[] => {
             rowNumber: i + 1,
         });
     }
+
     return rows;
-};
-
-const runWithLimit = async <T,>(
-    tasks: Array<() => Promise<T>>,
-    limit: number,
-): Promise<{results: T[]; errors: any[]}> => {
-    const results: T[] = [];
-    const errors: any[] = [];
-
-    let i = 0;
-    const workers = new Array(Math.max(1, limit)).fill(null).map(async () => {
-        while (true) {
-            const idx = i++;
-            if (idx >= tasks.length) return;
-            try {
-                const r = await tasks[idx]();
-                results.push(r);
-            } catch (e) {
-                errors.push(e);
-            }
-        }
-    });
-
-    await Promise.all(workers);
-    return {results, errors};
 };
 
 export const CoursesListPage: React.FC = () => {
@@ -146,6 +130,8 @@ export const CoursesListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
+
     const [code, setCode] = useState('');
     const [title, setTitle] = useState('');
     const [teacherId, setTeacherId] = useState('');
@@ -171,6 +157,7 @@ export const CoursesListPage: React.FC = () => {
                     coursesApi.getAll(),
                     groupsApi.getAll(),
                 ]);
+
                 setItems(coursesData);
                 setGroups(groupsData);
             } catch (e) {
@@ -181,9 +168,29 @@ export const CoursesListPage: React.FC = () => {
         })();
     }, []);
 
+    const currentCourse = useMemo(
+        () => (groupsCourseId ? items.find(c => c.id === groupsCourseId) ?? null : null),
+        [groupsCourseId, items],
+    );
+
+    const currentCourseGroups: GroupResponse[] = useMemo(() => {
+        if (!currentCourse) return [];
+
+        const codes = new Set(currentCourse.groupCodes);
+        return groups.filter(g => codes.has(g.code));
+    }, [currentCourse, groups]);
+
+    const availableGroups: GroupResponse[] = useMemo(() => {
+        if (!currentCourse) return [];
+
+        const codes = new Set(currentCourse.groupCodes);
+        return groups.filter(g => !codes.has(g.code));
+    }, [currentCourse, groups]);
+
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setCode('');
         setTitle('');
         setTeacherId('');
@@ -200,6 +207,7 @@ export const CoursesListPage: React.FC = () => {
     const openEditForm = (c: CourseResponse) => {
         setFormMode('edit');
         setEditingId(c.id);
+        setEditingVersion(c.version);
         setCode(c.code);
         setTitle(c.title);
         setTeacherId(c.teacherId);
@@ -208,11 +216,19 @@ export const CoursesListPage: React.FC = () => {
         setFormError(null);
     };
 
-    const handleEquipmentChange = (index: number, field: 'name' | 'quantity', value: string) => {
+    const handleEquipmentChange = (
+        index: number,
+        field: 'name' | 'quantity',
+        value: string,
+    ) => {
         setEquipment(prev =>
             prev.map((it, i) => {
                 if (i !== index) return it;
-                if (field === 'name') return {...it, name: value};
+
+                if (field === 'name') {
+                    return {...it, name: value};
+                }
+
                 const q = Number.parseInt(value, 10);
                 return {...it, quantity: Number.isFinite(q) && q > 0 ? q : 0};
             }),
@@ -262,9 +278,19 @@ export const CoursesListPage: React.FC = () => {
                     equipmentRequirements: normalizedEquipment,
                     groupCodes: [],
                 };
+
                 const created = await coursesApi.create(body);
                 setItems(prev => [...prev, created]);
-            } else if (formMode === 'edit' && editingId) {
+                resetForm();
+                return;
+            }
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
                 const body: UpdateCourseRequest = {
                     code: code.trim(),
                     title: title.trim(),
@@ -272,37 +298,61 @@ export const CoursesListPage: React.FC = () => {
                     plannedHours: hours,
                     equipmentRequirements: normalizedEquipment,
                 };
-                const updated = await coursesApi.update(editingId, body);
+
+                const updated = await coursesApi.update(editingId, body, editingVersion);
                 setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+                resetForm();
             }
-            resetForm();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения курса');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения курса');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleArchive = async (id: string) => {
+    const handleArchive = async (course: CourseResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await coursesApi.archive(id);
+            const updated = await coursesApi.archive(course.id, course.version);
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось архивировать курс');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось архивировать курс');
+            }
         }
     };
 
-    const handleActivate = async (id: string) => {
+    const handleActivate = async (course: CourseResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await coursesApi.activate(id);
+            const updated = await coursesApi.activate(course.id, course.version);
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось активировать курс');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось активировать курс');
+            }
         }
     };
 
@@ -313,6 +363,7 @@ export const CoursesListPage: React.FC = () => {
 
     const renderEquipment = (eq: CourseEquipmentItemDto[]) => {
         if (!eq || eq.length === 0) return '—';
+
         return (
             <div title={equipmentTitle(eq)}>
                 {eq.map((i, idx) => (
@@ -325,25 +376,9 @@ export const CoursesListPage: React.FC = () => {
         );
     };
 
-    const currentCourse = useMemo(
-        () => (groupsCourseId ? items.find(c => c.id === groupsCourseId) ?? null : null),
-        [groupsCourseId, items],
-    );
-
-    const currentCourseGroups: GroupResponse[] = useMemo(() => {
-        if (!currentCourse) return [];
-        const codes = new Set(currentCourse.groupCodes);
-        return groups.filter(g => codes.has(g.code));
-    }, [currentCourse, groups]);
-
-    const availableGroups: GroupResponse[] = useMemo(() => {
-        if (!currentCourse) return [];
-        const codes = new Set(currentCourse.groupCodes);
-        return groups.filter(g => !codes.has(g.code));
-    }, [currentCourse, groups]);
-
     const openGroupsForm = (c: CourseResponse) => {
         if (!isAdmin) return;
+
         setGroupsCourseId(c.id);
         setGroupToAddCode('');
         setGroupsError(null);
@@ -357,17 +392,36 @@ export const CoursesListPage: React.FC = () => {
 
     const handleAddGroup: React.FormEventHandler = async e => {
         e.preventDefault();
+
         if (!isAdmin || !groupsCourseId || !groupToAddCode) return;
+
+        if (!currentCourse) {
+            setGroupsError(PRECONDITION_MESSAGE);
+            return;
+        }
 
         setGroupsProcessing(true);
         setGroupsError(null);
+
         try {
-            const updated = await coursesApi.addGroup(groupsCourseId, groupToAddCode);
+            const updated = await coursesApi.addGroup(
+                groupsCourseId,
+                groupToAddCode,
+                currentCourse.version,
+            );
+
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
             setGroupToAddCode('');
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setGroupsError('Не удалось добавить группу к курсу');
+
+            if (err?.status === 409) {
+                setGroupsError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setGroupsError(PRECONDITION_MESSAGE);
+            } else {
+                setGroupsError('Не удалось добавить группу к курсу');
+            }
         } finally {
             setGroupsProcessing(false);
         }
@@ -376,14 +430,32 @@ export const CoursesListPage: React.FC = () => {
     const handleRemoveGroup = async (groupCode: string) => {
         if (!isAdmin || !groupsCourseId) return;
 
+        if (!currentCourse) {
+            setGroupsError(PRECONDITION_MESSAGE);
+            return;
+        }
+
         setGroupsProcessing(true);
         setGroupsError(null);
+
         try {
-            const updated = await coursesApi.removeGroup(groupsCourseId, groupCode);
+            const updated = await coursesApi.removeGroup(
+                groupsCourseId,
+                groupCode,
+                currentCourse.version,
+            );
+
             setItems(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setGroupsError('Не удалось удалить группу из курса');
+
+            if (err?.status === 409) {
+                setGroupsError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setGroupsError(PRECONDITION_MESSAGE);
+            } else {
+                setGroupsError('Не удалось удалить группу из курса');
+            }
         } finally {
             setGroupsProcessing(false);
         }
@@ -406,6 +478,8 @@ export const CoursesListPage: React.FC = () => {
             }
 
             let createdCount = 0;
+            let groupLinksSent = 0;
+
             const errors: string[] = [];
             const createdCourses: CourseResponse[] = [];
 
@@ -424,9 +498,11 @@ export const CoursesListPage: React.FC = () => {
                 }
 
                 let parsedEquipment: CourseEquipmentItemDto[] = [];
+
                 if (row.equipmentJson) {
                     try {
                         const raw = JSON.parse(row.equipmentJson);
+
                         if (Array.isArray(raw)) {
                             parsedEquipment = raw
                                 .map((it: any) => ({
@@ -452,6 +528,7 @@ export const CoursesListPage: React.FC = () => {
                         equipmentRequirements: parsedEquipment,
                         groupCodes: [],
                     };
+
                     const created = await coursesApi.create(body);
                     createdCourses.push(created);
                     createdCount++;
@@ -467,21 +544,34 @@ export const CoursesListPage: React.FC = () => {
                 setItems(prev => [...prev, ...createdCourses]);
             }
 
-            const groupTasks: Array<() => Promise<void>> = [];
             for (const row of rows) {
-                const created = createdCourses.find(c => c.code === row.code);
-                if (!created) continue;
-                for (const gc of row.groupCodes ?? []) {
-                    groupTasks.push(async () => {
-                        await coursesApi.addGroup(created.id, gc);
-                    });
-                }
-            }
+                let currentCreatedCourse = createdCourses.find(c => c.code === row.code);
 
-            if (groupTasks.length > 0) {
-                const {errors: groupErrors} = await runWithLimit(groupTasks, 8);
-                if (groupErrors.length) {
-                    errors.push(`Ошибок привязки групп: ${groupErrors.length}`);
+                if (!currentCreatedCourse) continue;
+
+                for (const groupCode of row.groupCodes ?? []) {
+                    try {
+                        currentCreatedCourse = await coursesApi.addGroup(
+                            currentCreatedCourse.id,
+                            groupCode,
+                            currentCreatedCourse.version,
+                        );
+
+                        groupLinksSent++;
+
+                        const index = createdCourses.findIndex(c => c.id === currentCreatedCourse?.id);
+                        if (index >= 0 && currentCreatedCourse) {
+                            createdCourses[index] = currentCreatedCourse;
+                        }
+                    } catch (err: any) {
+                        console.error(err);
+
+                        errors.push(
+                            `Строка ${row.rowNumber}: не удалось привязать группу ${groupCode}: ${
+                                err?.body?.message ?? 'ошибка'
+                            }`,
+                        );
+                    }
                 }
             }
 
@@ -490,7 +580,7 @@ export const CoursesListPage: React.FC = () => {
 
             const summary = [
                 `Успешно создано курсов: ${createdCount}`,
-                groupTasks.length ? `Привязок групп отправлено: ${groupTasks.length}` : '',
+                groupLinksSent ? `Привязок групп отправлено: ${groupLinksSent}` : '',
                 errors.length ? `Ошибок: ${errors.length}` : '',
                 errors.length ? `\n${errors.join('\n')}` : '',
             ]
@@ -566,12 +656,14 @@ export const CoursesListPage: React.FC = () => {
                                 Для курса пока не привязано ни одной группы.
                             </li>
                         )}
+
                         {currentCourseGroups.map(g => (
                             <li key={g.id} className={styles.groupsRow}>
                                 <span>
                                     {g.name}{' '}
                                     <span className={styles.groupCode}>({g.code})</span>
                                 </span>
+
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -591,12 +683,14 @@ export const CoursesListPage: React.FC = () => {
                             onChange={e => setGroupToAddCode(e.target.value)}
                         >
                             <option value="">Выберите группу…</option>
+
                             {availableGroups.map(g => (
                                 <option key={g.id} value={g.code}>
                                     {g.name} ({g.code})
                                 </option>
                             ))}
                         </select>
+
                         <Button type="submit" disabled={!groupToAddCode || groupsProcessing}>
                             Добавить группу
                         </Button>
@@ -616,12 +710,15 @@ export const CoursesListPage: React.FC = () => {
                     <FormField label="Код курса">
                         <Input value={code} onChange={e => setCode(e.target.value)} />
                     </FormField>
+
                     <FormField label="Название">
                         <Input value={title} onChange={e => setTitle(e.target.value)} />
                     </FormField>
+
                     <FormField label="ID Преподавателя">
                         <Input value={teacherId} onChange={e => setTeacherId(e.target.value)} />
                     </FormField>
+
                     <FormField label="Плановые часы">
                         <Input
                             type="number"
@@ -635,6 +732,7 @@ export const CoursesListPage: React.FC = () => {
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -645,6 +743,7 @@ export const CoursesListPage: React.FC = () => {
                     <div className={styles.itemsBlock}>
                         <div className={styles.itemsHeader}>
                             <strong>Требуемое оборудование</strong>
+
                             {equipment.length > 0 && (
                                 <Button type="button" variant="ghost" onClick={() => setEquipment([])}>
                                     Очистить
@@ -659,6 +758,7 @@ export const CoursesListPage: React.FC = () => {
                                     value={it.name}
                                     onChange={e => handleEquipmentChange(idx, 'name', e.target.value)}
                                 />
+
                                 <Input
                                     type="number"
                                     min={1}
@@ -666,6 +766,7 @@ export const CoursesListPage: React.FC = () => {
                                     value={it.quantity ? String(it.quantity) : ''}
                                     onChange={e => handleEquipmentChange(idx, 'quantity', e.target.value)}
                                 />
+
                                 <Button type="button" variant="ghost" onClick={() => handleRemoveEquipment(idx)}>
                                     Удалить
                                 </Button>
@@ -701,6 +802,7 @@ export const CoursesListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(c => (
                         <tr key={c.id}>
@@ -709,21 +811,26 @@ export const CoursesListPage: React.FC = () => {
                             <td>{c.teacherId}</td>
                             <td>{c.plannedHours}</td>
                             <td>{c.requiredRoomCapacity}</td>
-                            <td className={styles.itemsSummary}>{renderEquipment(c.equipmentRequirements ?? [])}</td>
+                            <td className={styles.itemsSummary}>
+                                {renderEquipment(c.equipmentRequirements ?? [])}
+                            </td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button variant="ghost" type="button" onClick={() => openEditForm(c)}>
                                         Редактировать
                                     </Button>
+
                                     <Button variant="ghost" type="button" onClick={() => openGroupsForm(c)}>
                                         Группы
                                     </Button>
+
                                     {c.status === 'ACTIVE' ? (
-                                        <Button variant="ghost" type="button" onClick={() => handleArchive(c.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(c)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button variant="ghost" type="button" onClick={() => handleActivate(c.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(c)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -731,6 +838,7 @@ export const CoursesListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 7 : 6}>Нет курсов</td>

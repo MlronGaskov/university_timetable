@@ -1,4 +1,4 @@
-import {http} from './http';
+import {http, ifMatchHeaders} from './http';
 import type {
     CreateUserRequest,
     CreateUserResult,
@@ -26,29 +26,33 @@ export const usersApi = {
         return http<UserResponse>(`${BASE_PATH}/${id}`);
     },
 
-    update(id: UUID, body: UpdateUserRequest) {
+    update(id: UUID, body: UpdateUserRequest, version: number) {
         return http<UserResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
+            headers: ifMatchHeaders(version),
             body: JSON.stringify(body),
         });
     },
 
-    setPassword(id: UUID, body: SetPasswordRequest) {
+    setPassword(id: UUID, body: SetPasswordRequest, version: number) {
         return http<UserResponse>(`${BASE_PATH}/${id}/password`, {
             method: 'POST',
+            headers: ifMatchHeaders(version),
             body: JSON.stringify(body),
         });
     },
 
-    deactivate(id: UUID) {
+    deactivate(id: UUID, version: number) {
         return http<UserResponse>(`${BASE_PATH}/${id}/deactivate`, {
             method: 'POST',
+            headers: ifMatchHeaders(version),
         });
     },
 
-    activate(id: UUID) {
+    activate(id: UUID, version: number) {
         return http<UserResponse>(`${BASE_PATH}/${id}/activate`, {
             method: 'POST',
+            headers: ifMatchHeaders(version),
         });
     },
 };

@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record PolicyResponse(
         UUID id,
+        long version,
         String name,
         String gridJson,
         String breaksJson,

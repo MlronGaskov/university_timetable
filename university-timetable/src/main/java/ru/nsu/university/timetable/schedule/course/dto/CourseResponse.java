@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record CourseResponse(
         UUID id,
+        long version,
         String code,
         String title,
         Status status,

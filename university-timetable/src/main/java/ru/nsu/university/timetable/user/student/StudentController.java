@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.user.student.dto.CreateStudentRequest;
 import ru.nsu.university.timetable.user.student.dto.StudentResponse;
 import ru.nsu.university.timetable.user.student.dto.UpdateStudentRequest;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,19 +37,22 @@ public class StudentController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public StudentResponse update(@PathVariable UUID id,
+                                  @RequestHeader(name = "If-Match", required = false) String ifMatch,
                                   @RequestBody @Valid UpdateStudentRequest req) {
-        return service.update(id, req);
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @PostMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
-    public StudentResponse archive(@PathVariable UUID id) {
-        return service.archive(id);
+    public StudentResponse archive(@PathVariable UUID id,
+                                   @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.archive(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{id}/activate")
     @PreAuthorize("hasRole('ADMIN')")
-    public StudentResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    public StudentResponse activate(@PathVariable UUID id,
+                                    @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.activate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 }

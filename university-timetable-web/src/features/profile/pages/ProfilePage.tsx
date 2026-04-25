@@ -17,6 +17,12 @@ const dayOptions: { value: DayOfWeek; label: string }[] = [
     {value: 'SATURDAY', label: 'Суббота'},
 ];
 
+const CONFLICT_MESSAGE =
+    'Данные преподавателя уже были изменены другим пользователем. Обновите страницу и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию данных преподавателя. Обновите страницу и повторите попытку.';
+
 const getDefaultWorkingHours = (): WorkingIntervalDto[] => [
     {day: 'MONDAY', startTime: '09:00', endTime: '22:00'},
     {day: 'TUESDAY', startTime: '09:00', endTime: '22:00'},
@@ -45,12 +51,15 @@ export const ProfilePage: React.FC = () => {
         (async () => {
             setTeacherLoading(true);
             setTeacherError(null);
+
             try {
                 const all = await teachersApi.getAll();
                 const found =
                     all.find(t => t.teacherId === teacherId) ||
                     all.find(t => t.id === teacherId);
+
                 setTeacher(found ?? null);
+
                 if (!found) {
                     setTeacherError(
                         'Для вашей учётной записи не найден преподаватель в справочнике. ' +
@@ -66,10 +75,40 @@ export const ProfilePage: React.FC = () => {
         })();
     }, [isTeacher, teacherId]);
 
+    const reloadTeacher = async () => {
+        if (!isTeacher || !teacherId) return;
+
+        setTeacherLoading(true);
+        setTeacherError(null);
+
+        try {
+            const all = await teachersApi.getAll();
+            const found =
+                all.find(t => t.teacherId === teacherId) ||
+                all.find(t => t.id === teacherId);
+
+            setTeacher(found ?? null);
+
+            if (!found) {
+                setTeacherError(
+                    'Для вашей учётной записи не найден преподаватель в справочнике. ' +
+                    'Попросите администратора добавить вас в список преподавателей.',
+                );
+            }
+        } catch (e) {
+            console.error(e);
+            setTeacherError('Не удалось загрузить данные преподавателя');
+        } finally {
+            setTeacherLoading(false);
+        }
+    };
+
     const startEditHours = () => {
         if (!teacher) return;
+
         const base = getDefaultWorkingHours();
         const current = teacher.preferredWorkingHours ?? [];
+
         const initial = base.map(def => {
             const existing = current.find(h => h.day === def.day);
             return existing ?? def;
@@ -80,7 +119,11 @@ export const ProfilePage: React.FC = () => {
         setHoursFormOpen(true);
     };
 
-    const handleHoursChange = (day: DayOfWeek, field: 'startTime' | 'endTime', value: string) => {
+    const handleHoursChange = (
+        day: DayOfWeek,
+        field: 'startTime' | 'endTime',
+        value: string,
+    ) => {
         setHours(prev =>
             prev.map(h => (h.day === day ? {...h, [field]: value} : h)),
         );
@@ -88,19 +131,39 @@ export const ProfilePage: React.FC = () => {
 
     const handleHoursSave: React.FormEventHandler = async e => {
         e.preventDefault();
+
         if (!teacher) return;
+
+        if (teacher.version == null) {
+            setHoursError(PRECONDITION_MESSAGE);
+            return;
+        }
 
         setHoursSaving(true);
         setHoursError(null);
+
         try {
-            const updated = await teachersApi.updateWorkingHours(teacher.id, {
-                preferredWorkingHours: hours,
-            });
+            const updated = await teachersApi.updateWorkingHours(
+                teacher.id,
+                {
+                    preferredWorkingHours: hours,
+                },
+                teacher.version,
+            );
+
             setTeacher(updated);
             setHoursFormOpen(false);
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setHoursError('Ошибка сохранения рабочих часов');
+
+            if (err?.status === 409) {
+                setHoursError(CONFLICT_MESSAGE);
+                await reloadTeacher();
+            } else if (err?.status === 428) {
+                setHoursError(PRECONDITION_MESSAGE);
+            } else {
+                setHoursError('Ошибка сохранения рабочих часов');
+            }
         } finally {
             setHoursSaving(false);
         }
@@ -115,8 +178,10 @@ export const ProfilePage: React.FC = () => {
         if (!teacher || !teacher.preferredWorkingHours || teacher.preferredWorkingHours.length === 0) {
             return null;
         }
+
         const map = new Map<DayOfWeek, WorkingIntervalDto>();
         teacher.preferredWorkingHours.forEach(h => map.set(h.day, h));
+
         return dayOptions
             .filter(d => map.has(d.value))
             .map(d => {
@@ -130,24 +195,29 @@ export const ProfilePage: React.FC = () => {
             <div className={styles.grid}>
                 <section className={styles.card}>
                     <h2 className={styles.sectionTitle}>Основная информация</h2>
+
                     <dl className={styles.infoList}>
                         <div>
                             <dt>Роль</dt>
                             <dd><b>{role ?? '—'}</b></dd>
                         </div>
+
                         <div>
                             <dt>User ID</dt>
                             <dd><code>{userId ?? '—'}</code></dd>
                         </div>
+
                         <div>
                             <dt>Teacher ID</dt>
                             <dd><code>{teacherId ?? '—'}</code></dd>
                         </div>
+
                         <div>
                             <dt>Student ID</dt>
                             <dd><code>{studentId ?? '—'}</code></dd>
                         </div>
                     </dl>
+
                     <p className={styles.muted}>
                         Эти данные приходят из токена авторизации и используются для настройки доступа в системе.
                     </p>
@@ -156,9 +226,11 @@ export const ProfilePage: React.FC = () => {
                 {isStudent && (
                     <section className={styles.card}>
                         <h2 className={styles.sectionTitle}>Информация студента</h2>
+
                         <p className={styles.muted}>
                             Ваш идентификатор студента: <code>{studentId ?? '—'}</code>.
                         </p>
+
                         <p className={styles.muted}>
                             Здесь можно позже вывести привязанные группы и курсы (например, на основе
                             <code> groupsApi </code> и <code>coursesApi</code>).
@@ -169,6 +241,7 @@ export const ProfilePage: React.FC = () => {
                 {isAdmin && (
                     <section className={styles.card}>
                         <h2 className={styles.sectionTitle}>Администрирование</h2>
+
                         <ul className={styles.list}>
                             <li>Управление пользователями: раздел «Пользователи».</li>
                             <li>Управление справочниками: курсы, группы, аудитории, семестры, политики.</li>
@@ -196,6 +269,7 @@ export const ProfilePage: React.FC = () => {
                                     <span className={styles.teacherName}>{teacher.fullName}</span>
                                     <span className={styles.badge}>ID: {teacher.teacherId}</span>
                                 </p>
+
                                 <p className={styles.muted}>
                                     Эти предпочтительные часы используются при генерации расписания как
                                     «желательные» временные окна.
@@ -219,13 +293,16 @@ export const ProfilePage: React.FC = () => {
                                     type="button"
                                     onClick={startEditHours}
                                 >
-                                    {teacher?.preferredWorkingHours?.length ? 'Изменить часы работы' : 'Задать часы работы'}
+                                    {teacher?.preferredWorkingHours?.length
+                                        ? 'Изменить часы работы'
+                                        : 'Задать часы работы'}
                                 </Button>
 
                                 {hoursFormOpen && (
                                     <form className={styles.hoursForm} onSubmit={handleHoursSave}>
                                         <div className={styles.hoursFormHeader}>
                                             <strong>Желаемые часы работы</strong>
+
                                             <Button
                                                 type="button"
                                                 variant="ghost"
@@ -242,9 +319,11 @@ export const ProfilePage: React.FC = () => {
                                                     startTime: '09:00',
                                                     endTime: '22:00',
                                                 };
+
                                             return (
                                                 <div key={d.value} className={styles.hoursRow}>
                                                     <span className={styles.hoursDay}>{d.label}</span>
+
                                                     <Input
                                                         type="time"
                                                         value={val.startTime}
@@ -252,6 +331,7 @@ export const ProfilePage: React.FC = () => {
                                                             handleHoursChange(d.value, 'startTime', e.target.value)
                                                         }
                                                     />
+
                                                     <Input
                                                         type="time"
                                                         value={val.endTime}
@@ -271,6 +351,7 @@ export const ProfilePage: React.FC = () => {
                                             <Button type="submit" disabled={hoursSaving}>
                                                 {hoursSaving ? 'Сохранение…' : 'Сохранить'}
                                             </Button>
+
                                             <Button
                                                 type="button"
                                                 variant="ghost"

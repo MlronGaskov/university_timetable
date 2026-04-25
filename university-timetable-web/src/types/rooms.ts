@@ -28,6 +28,7 @@ export interface RoomResponse {
     number: string;
     capacity: number;
     status: Status;
+    version: number;
     createdAt: string;
     updatedAt: string;
     items: RoomItemDto[];

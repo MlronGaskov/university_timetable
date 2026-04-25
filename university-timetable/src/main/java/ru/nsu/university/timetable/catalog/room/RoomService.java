@@ -8,6 +8,7 @@ import ru.nsu.university.timetable.catalog.room.dto.CreateRoomRequest;
 import ru.nsu.university.timetable.catalog.room.dto.RoomItemDto;
 import ru.nsu.university.timetable.catalog.room.dto.RoomResponse;
 import ru.nsu.university.timetable.catalog.room.dto.UpdateRoomRequest;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.Comparator;
 import java.util.List;
@@ -43,7 +44,7 @@ public class RoomService {
 
         applyItems(room, req.items());
 
-        return map(roomRepository.save(room));
+        return map(roomRepository.saveAndFlush(room));
     }
 
     @Transactional(readOnly = true)
@@ -60,9 +61,8 @@ public class RoomService {
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + id));
     }
 
-    public RoomResponse update(UUID id, UpdateRoomRequest req) {
-        Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Room not found: " + id));
+    public RoomResponse update(UUID id, long expectedVersion, UpdateRoomRequest req) {
+        Room room = findEntityForMutation(id, expectedVersion);
 
         if (req.roomCode() != null && !req.roomCode().equalsIgnoreCase(room.getRoomCode())) {
             if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
@@ -90,23 +90,26 @@ public class RoomService {
             applyItems(room, req.items());
         }
 
-        return map(room);
+        return map(roomRepository.saveAndFlush(room));
     }
 
-    public RoomResponse archive(UUID id) {
-        Room room = roomRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Room not found: " + id));
-
+    public RoomResponse archive(UUID id, long expectedVersion) {
+        Room room = findEntityForMutation(id, expectedVersion);
         room.setStatus(Status.INACTIVE);
-        return map(room);
+        return map(roomRepository.saveAndFlush(room));
     }
 
-    public RoomResponse activate(UUID id) {
+    public RoomResponse activate(UUID id, long expectedVersion) {
+        Room room = findEntityForMutation(id, expectedVersion);
+        room.setStatus(Status.ACTIVE);
+        return map(roomRepository.saveAndFlush(room));
+    }
+
+    private Room findEntityForMutation(UUID id, long expectedVersion) {
         Room room = roomRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + id));
-
-        room.setStatus(Status.ACTIVE);
-        return map(room);
+        OptimisticLockingGuard.verifyVersion("Room", id, expectedVersion, room.getVersion());
+        return room;
     }
 
     private void applyItems(Room room, List<RoomItemDto> dtos) {
@@ -126,6 +129,7 @@ public class RoomService {
 
         return new RoomResponse(
                 r.getId(),
+                r.getVersion(),
                 r.getRoomCode(),
                 r.getBuilding(),
                 r.getNumber(),

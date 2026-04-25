@@ -5,6 +5,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.user.auth.dto.*;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -32,22 +33,28 @@ public class UserController {
     }
 
     @PutMapping("/{id}")
-    public UserResponse update(@PathVariable UUID id, @RequestBody @Validated UpdateUserRequest req) {
-        return service.update(id, req);
+    public UserResponse update(@PathVariable UUID id,
+                               @RequestHeader(name = "If-Match", required = false) String ifMatch,
+                               @RequestBody @Validated UpdateUserRequest req) {
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @PostMapping("/{id}/password")
-    public UserResponse setPassword(@PathVariable UUID id, @RequestBody @Validated SetPasswordRequest req) {
-        return service.setPassword(id, req.newPassword());
+    public UserResponse setPassword(@PathVariable UUID id,
+                                    @RequestHeader(name = "If-Match", required = false) String ifMatch,
+                                    @RequestBody @Validated SetPasswordRequest req) {
+        return service.setPassword(id, IfMatchVersion.parseRequired(ifMatch), req.newPassword());
     }
 
     @PostMapping("/{id}/deactivate")
-    public UserResponse deactivate(@PathVariable UUID id) {
-        return service.deactivate(id);
+    public UserResponse deactivate(@PathVariable UUID id,
+                                   @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.deactivate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{id}/activate")
-    public UserResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    public UserResponse activate(@PathVariable UUID id,
+                                 @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.activate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 }

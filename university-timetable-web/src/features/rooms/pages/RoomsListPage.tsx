@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {roomsApi} from '@/api/rooms';
 import type {
@@ -28,6 +28,12 @@ interface CsvRow {
     rowNumber: number;
 }
 
+const CONFLICT_MESSAGE =
+    'Аудитория уже была изменена другим пользователем. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию аудитории. Обновите страницу и повторите попытку.';
+
 const splitCsvLine = (line: string): string[] => {
     const result: string[] = [];
     let current = '';
@@ -50,6 +56,7 @@ const splitCsvLine = (line: string): string[] => {
             current += ch;
         }
     }
+
     result.push(current);
     return result;
 };
@@ -74,6 +81,7 @@ const parseCsv = (text: string): CsvRow[] => {
     }
 
     const rows: CsvRow[] = [];
+
     for (let i = 1; i < lines.length; i++) {
         const rawLine = lines[i].trim();
         if (!rawLine) continue;
@@ -108,6 +116,7 @@ const runWithLimit = async <T,>(
         while (true) {
             const idx = i++;
             if (idx >= tasks.length) return;
+
             try {
                 const r = await tasks[idx]();
                 results.push(r);
@@ -129,6 +138,8 @@ export const RoomsListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
+
     const [roomCode, setRoomCode] = useState('');
     const [building, setBuilding] = useState('');
     const [number, setNumber] = useState('');
@@ -144,6 +155,7 @@ export const RoomsListPage: React.FC = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+
             try {
                 const data = await roomsApi.getAll();
                 setItems(data);
@@ -158,6 +170,7 @@ export const RoomsListPage: React.FC = () => {
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setRoomCode('');
         setBuilding('');
         setNumber('');
@@ -174,6 +187,7 @@ export const RoomsListPage: React.FC = () => {
     const openEditForm = (r: RoomResponse) => {
         setFormMode('edit');
         setEditingId(r.id);
+        setEditingVersion(r.version);
         setRoomCode(r.roomCode);
         setBuilding(r.building);
         setNumber(r.number);
@@ -190,9 +204,11 @@ export const RoomsListPage: React.FC = () => {
         setRoomItems(prev =>
             prev.map((it, i) => {
                 if (i !== index) return it;
+
                 if (field === 'name') {
                     return {...it, name: value};
                 }
+
                 const q = Number.parseInt(value, 10);
                 return {...it, quantity: Number.isFinite(q) && q > 0 ? q : 0};
             }),
@@ -209,6 +225,7 @@ export const RoomsListPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!isAdmin) return;
 
         if (!roomCode.trim() || !building.trim() || !number.trim() || !capacity.trim()) {
@@ -241,9 +258,19 @@ export const RoomsListPage: React.FC = () => {
                     capacity: parsedCap,
                     items: normalizedItems.length > 0 ? normalizedItems : undefined,
                 };
+
                 const created = await roomsApi.create(body);
                 setItems(prev => [...prev, created]);
-            } else if (formMode === 'edit' && editingId) {
+                resetForm();
+                return;
+            }
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
                 const body: UpdateRoomRequest = {
                     roomCode: roomCode.trim(),
                     building: building.trim(),
@@ -251,37 +278,61 @@ export const RoomsListPage: React.FC = () => {
                     capacity: parsedCap,
                     items: normalizedItems,
                 };
-                const updated = await roomsApi.update(editingId, body);
+
+                const updated = await roomsApi.update(editingId, body, editingVersion);
                 setItems(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+                resetForm();
             }
-            resetForm();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения аудитории');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения аудитории');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleArchive = async (id: string) => {
+    const handleArchive = async (room: RoomResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await roomsApi.archive(id);
+            const updated = await roomsApi.archive(room.id, room.version);
             setItems(prev => prev.map(r => (r.id === updated.id ? updated : r)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось архивировать аудиторию');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось архивировать аудиторию');
+            }
         }
     };
 
-    const handleActivate = async (id: string) => {
+    const handleActivate = async (room: RoomResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await roomsApi.activate(id);
+            const updated = await roomsApi.activate(room.id, room.version);
             setItems(prev => prev.map(r => (r.id === updated.id ? updated : r)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось активировать аудиторию');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось активировать аудиторию');
+            }
         }
     };
 
@@ -292,6 +343,7 @@ export const RoomsListPage: React.FC = () => {
 
     const renderItems = (its: RoomItemDto[]) => {
         if (!its || its.length === 0) return '—';
+
         return (
             <div title={itemsTitle(its)}>
                 {its.map((i, idx) => (
@@ -338,9 +390,11 @@ export const RoomsListPage: React.FC = () => {
                 }
 
                 let parsedItems: RoomItemDto[] | undefined;
+
                 if (row.itemsJson) {
                     try {
                         const raw = JSON.parse(row.itemsJson);
+
                         if (Array.isArray(raw)) {
                             parsedItems = raw
                                 .map((it: any) => ({
@@ -369,6 +423,7 @@ export const RoomsListPage: React.FC = () => {
                         capacity: row.capacity,
                         items: parsedItems && parsedItems.length > 0 ? parsedItems : undefined,
                     };
+
                     return await roomsApi.create(body);
                 });
             }
@@ -380,6 +435,7 @@ export const RoomsListPage: React.FC = () => {
             }
 
             const errors: string[] = [...validationErrors];
+
             for (const e of createErrors) {
                 errors.push(e?.body?.message ?? 'ошибка создания аудитории');
             }
@@ -427,18 +483,15 @@ export const RoomsListPage: React.FC = () => {
         );
     };
 
-    const actions = useMemo(
-        () => (
-            <CsvToolbar
-                onExport={exportCsv}
-                onImportFile={importFromFile}
-                importDisabled={csvProcessing}
-                showCreate={isAdmin}
-                createLabel="Создать аудиторию"
-                onCreate={openCreateForm}
-            />
-        ),
-        [csvProcessing, isAdmin, items],
+    const actions = (
+        <CsvToolbar
+            onExport={exportCsv}
+            onImportFile={importFromFile}
+            importDisabled={csvProcessing}
+            showCreate={isAdmin}
+            createLabel="Создать аудиторию"
+            onCreate={openCreateForm}
+        />
     );
 
     return (
@@ -450,12 +503,15 @@ export const RoomsListPage: React.FC = () => {
                     <FormField label="Код аудитории">
                         <Input value={roomCode} onChange={e => setRoomCode(e.target.value)} />
                     </FormField>
+
                     <FormField label="Корпус">
                         <Input value={building} onChange={e => setBuilding(e.target.value)} />
                     </FormField>
+
                     <FormField label="Номер">
                         <Input value={number} onChange={e => setNumber(e.target.value)} />
                     </FormField>
+
                     <FormField label="Вместимость">
                         <Input
                             type="number"
@@ -469,6 +525,7 @@ export const RoomsListPage: React.FC = () => {
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -479,6 +536,7 @@ export const RoomsListPage: React.FC = () => {
                     <div className={styles.itemsBlock}>
                         <div className={styles.itemsHeader}>
                             <strong>Оборудование аудитории</strong>
+
                             {roomItems.length > 0 && (
                                 <Button type="button" variant="ghost" onClick={() => setRoomItems([])}>
                                     Очистить
@@ -493,6 +551,7 @@ export const RoomsListPage: React.FC = () => {
                                     value={it.name}
                                     onChange={e => handleItemChange(idx, 'name', e.target.value)}
                                 />
+
                                 <Input
                                     type="number"
                                     min={1}
@@ -500,6 +559,7 @@ export const RoomsListPage: React.FC = () => {
                                     value={it.quantity ? String(it.quantity) : ''}
                                     onChange={e => handleItemChange(idx, 'quantity', e.target.value)}
                                 />
+
                                 <Button type="button" variant="ghost" onClick={() => handleRemoveItem(idx)}>
                                     Удалить
                                 </Button>
@@ -533,6 +593,7 @@ export const RoomsListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(r => (
                         <tr key={r.id}>
@@ -540,17 +601,19 @@ export const RoomsListPage: React.FC = () => {
                             <td>{r.building} {r.number}</td>
                             <td>{r.capacity}</td>
                             <td className={styles.itemsSummary}>{renderItems(r.items ?? [])}</td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button variant="ghost" type="button" onClick={() => openEditForm(r)}>
                                         Редактировать
                                     </Button>
+
                                     {r.status === 'ACTIVE' ? (
-                                        <Button variant="ghost" type="button" onClick={() => handleArchive(r.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(r)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button variant="ghost" type="button" onClick={() => handleActivate(r.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(r)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -558,6 +621,7 @@ export const RoomsListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 5 : 4}>Нет аудиторий</td>

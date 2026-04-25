@@ -1,7 +1,11 @@
 import React, {useEffect, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {policiesApi} from '@/api/policies';
-import type {CreatePolicyRequest, PolicyResponse, UpdatePolicyRequest,} from '@/types/policies';
+import type {
+    CreatePolicyRequest,
+    PolicyResponse,
+    UpdatePolicyRequest,
+} from '@/types/policies';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Input} from '@/components/ui/Input';
 import {FormField} from '@/components/ui/FormField';
@@ -25,6 +29,12 @@ interface CsvRow {
     rowNumber: number;
 }
 
+const CONFLICT_MESSAGE =
+    'Политика уже была изменена другим пользователем. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию политики. Обновите страницу и повторите попытку.';
+
 const splitCsvLine = (line: string): string[] => {
     const result: string[] = [];
     let current = '';
@@ -47,6 +57,7 @@ const splitCsvLine = (line: string): string[] => {
             current += ch;
         }
     }
+
     result.push(current);
     return result;
 };
@@ -59,6 +70,7 @@ export const PoliciesListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
 
     const [name, setName] = useState('');
     const [gridJson, setGridJson] = useState('');
@@ -76,6 +88,7 @@ export const PoliciesListPage: React.FC = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+
             try {
                 const data = await policiesApi.getAll();
                 setItems(data);
@@ -90,6 +103,7 @@ export const PoliciesListPage: React.FC = () => {
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setName('');
         setGridJson('');
         setBreaksJson('');
@@ -107,6 +121,7 @@ export const PoliciesListPage: React.FC = () => {
     const openEditForm = (p: PolicyResponse) => {
         setFormMode('edit');
         setEditingId(p.id);
+        setEditingVersion(p.version);
         setName(p.name);
         setGridJson(p.gridJson);
         setBreaksJson(p.breaksJson);
@@ -118,14 +133,21 @@ export const PoliciesListPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!isAdmin) return;
 
         if (!name.trim()) {
             setFormError('Заполните имя политики');
             return;
         }
-        if (!gridJson.trim() || !breaksJson.trim() || !limitsJson.trim()
-            || !travelMatrixJson.trim() || !weightsJson.trim()) {
+
+        if (
+            !gridJson.trim() ||
+            !breaksJson.trim() ||
+            !limitsJson.trim() ||
+            !travelMatrixJson.trim() ||
+            !weightsJson.trim()
+        ) {
             setFormError('Все JSON-поля должны быть заполнены');
             return;
         }
@@ -146,28 +168,57 @@ export const PoliciesListPage: React.FC = () => {
             if (formMode === 'create') {
                 const created = await policiesApi.create(body as CreatePolicyRequest);
                 setItems(prev => [...prev, created]);
-            } else if (formMode === 'edit' && editingId) {
-                const updated = await policiesApi.update(editingId, body as UpdatePolicyRequest);
-                setItems(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+                resetForm();
+                return;
             }
-            resetForm();
-        } catch (err) {
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
+                const updated = await policiesApi.update(
+                    editingId,
+                    body as UpdatePolicyRequest,
+                    editingVersion,
+                );
+
+                setItems(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+                resetForm();
+            }
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения политики (возможно, имя уже занято)');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения политики (возможно, имя уже занято)');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (policy: PolicyResponse) => {
         if (!isAdmin) return;
         if (!confirm('Удалить эту политику?')) return;
+
         try {
-            await policiesApi.delete(id);
-            setItems(prev => prev.filter(p => p.id !== id));
-        } catch (e) {
+            await policiesApi.delete(policy.id, policy.version);
+            setItems(prev => prev.filter(p => p.id !== policy.id));
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось удалить политику');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось удалить политику');
+            }
         }
     };
 
@@ -199,9 +250,11 @@ export const PoliciesListPage: React.FC = () => {
         }
 
         const rows: CsvRow[] = [];
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
+
             const parts = splitCsvLine(line);
             const safe = (idx: number) => (parts[idx] ?? '').trim();
 
@@ -215,6 +268,7 @@ export const PoliciesListPage: React.FC = () => {
                 rowNumber: i + 1,
             });
         }
+
         return rows;
     };
 
@@ -238,8 +292,14 @@ export const PoliciesListPage: React.FC = () => {
             const errors: string[] = [];
 
             for (const row of rows) {
-                if (!row.name || !row.gridJson || !row.breaksJson || !row.limitsJson ||
-                    !row.travelMatrixJson || !row.weightsJson) {
+                if (
+                    !row.name ||
+                    !row.gridJson ||
+                    !row.breaksJson ||
+                    !row.limitsJson ||
+                    !row.travelMatrixJson ||
+                    !row.weightsJson
+                ) {
                     errors.push(`Строка ${row.rowNumber}: не все поля заполнены`);
                     continue;
                 }
@@ -253,6 +313,7 @@ export const PoliciesListPage: React.FC = () => {
                         travelMatrixJson: row.travelMatrixJson,
                         weightsJson: row.weightsJson,
                     });
+
                     success++;
                     setItems(prev => [...prev, created]);
                 } catch (err: any) {
@@ -321,12 +382,12 @@ export const PoliciesListPage: React.FC = () => {
 
     return (
         <Page title="Политики" actions={actions}>
-            <CsvMessages error={csvError} result={csvResult}/>
+            <CsvMessages error={csvError} result={csvResult} />
 
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Имя политики">
-                        <Input value={name} onChange={e => setName(e.target.value)}/>
+                        <Input value={name} onChange={e => setName(e.target.value)} />
                     </FormField>
 
                     <FormField label="Grid JSON">
@@ -373,6 +434,7 @@ export const PoliciesListPage: React.FC = () => {
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -396,12 +458,14 @@ export const PoliciesListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(p => (
                         <tr key={p.id}>
                             <td>{p.name}</td>
                             <td>{formatInstant(p.createdAt)}</td>
                             <td>{formatInstant(p.updatedAt)}</td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button
@@ -411,10 +475,11 @@ export const PoliciesListPage: React.FC = () => {
                                     >
                                         Редактировать
                                     </Button>
+
                                     <Button
                                         type="button"
                                         variant="ghost"
-                                        onClick={() => handleDelete(p.id)}
+                                        onClick={() => handleDelete(p)}
                                     >
                                         Удалить
                                     </Button>
@@ -422,6 +487,7 @@ export const PoliciesListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 4 : 3}>Нет политик</td>

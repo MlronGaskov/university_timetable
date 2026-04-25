@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.catalog.room.dto.CreateRoomRequest;
 import ru.nsu.university.timetable.catalog.room.dto.RoomResponse;
 import ru.nsu.university.timetable.catalog.room.dto.UpdateRoomRequest;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,19 +37,22 @@ public class RoomController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public RoomResponse update(@PathVariable UUID id,
+                               @RequestHeader(name = "If-Match", required = false) String ifMatch,
                                @RequestBody @Validated UpdateRoomRequest req) {
-        return service.update(id, req);
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @PostMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
-    public RoomResponse archive(@PathVariable UUID id) {
-        return service.archive(id);
+    public RoomResponse archive(@PathVariable UUID id,
+                                @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.archive(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{id}/activate")
     @PreAuthorize("hasRole('ADMIN')")
-    public RoomResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    public RoomResponse activate(@PathVariable UUID id,
+                                 @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.activate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 }

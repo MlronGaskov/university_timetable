@@ -1,4 +1,4 @@
-import React, {useEffect, useState, useMemo} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {Page} from '@/components/layout/Page';
 import {groupsApi} from '@/api/groups';
 import {studentsApi} from '@/api/students';
@@ -33,6 +33,12 @@ type ImportTaskError = {
     message: string;
 };
 
+const CONFLICT_MESSAGE =
+    'Группа уже была изменена другим пользователем. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию группы. Обновите страницу и повторите попытку.';
+
 const runWithLimit = async <T,>(
     tasks: Array<() => Promise<T>>,
     limit: number,
@@ -45,6 +51,7 @@ const runWithLimit = async <T,>(
         while (true) {
             const idx = i++;
             if (idx >= tasks.length) return;
+
             try {
                 const r = await tasks[idx]();
                 results.push(r);
@@ -69,6 +76,8 @@ export const GroupsListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
+
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [size, setSize] = useState('');
@@ -87,11 +96,13 @@ export const GroupsListPage: React.FC = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+
             try {
                 const [groups, students] = await Promise.all([
                     groupsApi.getAll(),
                     studentsApi.getAll(),
                 ]);
+
                 setItems(groups);
                 setAllStudents(students);
             } catch (e) {
@@ -102,9 +113,29 @@ export const GroupsListPage: React.FC = () => {
         })();
     }, []);
 
+    const currentGroup = useMemo(
+        () => (studentsGroupId ? items.find(g => g.id === studentsGroupId) ?? null : null),
+        [studentsGroupId, items],
+    );
+
+    const currentGroupStudents: StudentResponse[] = useMemo(() => {
+        if (!currentGroup) return [];
+
+        const ids = new Set(currentGroup.studentIds);
+        return allStudents.filter(s => ids.has(s.studentId));
+    }, [currentGroup, allStudents]);
+
+    const availableStudents: StudentResponse[] = useMemo(() => {
+        if (!currentGroup) return [];
+
+        const ids = new Set(currentGroup.studentIds);
+        return allStudents.filter(s => !ids.has(s.studentId));
+    }, [currentGroup, allStudents]);
+
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setName('');
         setCode('');
         setSize('');
@@ -119,6 +150,7 @@ export const GroupsListPage: React.FC = () => {
     const openEditForm = (g: GroupResponse) => {
         setFormMode('edit');
         setEditingId(g.id);
+        setEditingVersion(g.version);
         setName(g.name);
         setCode(g.code);
         setSize(String(g.size));
@@ -127,6 +159,7 @@ export const GroupsListPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!isAdmin) return;
 
         if (!name.trim() || !code.trim() || !size.trim()) {
@@ -150,67 +183,85 @@ export const GroupsListPage: React.FC = () => {
                     code: code.trim(),
                     size: parsedSize,
                 };
+
                 const created = await groupsApi.create(body);
                 setItems(prev => [...prev, created]);
-            } else if (formMode === 'edit' && editingId) {
+                resetForm();
+                return;
+            }
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
                 const body: UpdateGroupRequest = {
                     name: name.trim(),
                     code: code.trim(),
                     size: parsedSize,
                 };
-                const updated = await groupsApi.update(editingId, body);
+
+                const updated = await groupsApi.update(editingId, body, editingVersion);
                 setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
+                resetForm();
             }
-            resetForm();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения группы');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения группы');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleArchive = async (id: string) => {
+    const handleArchive = async (group: GroupResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await groupsApi.archive(id);
+            const updated = await groupsApi.archive(group.id, group.version);
             setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось архивировать группу');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось архивировать группу');
+            }
         }
     };
 
-    const handleActivate = async (id: string) => {
+    const handleActivate = async (group: GroupResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await groupsApi.activate(id);
+            const updated = await groupsApi.activate(group.id, group.version);
             setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось активировать группу');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось активировать группу');
+            }
         }
     };
-
-    const currentGroup = useMemo(
-        () => (studentsGroupId ? items.find(g => g.id === studentsGroupId) ?? null : null),
-        [studentsGroupId, items],
-    );
-
-    const currentGroupStudents: StudentResponse[] = useMemo(() => {
-        if (!currentGroup) return [];
-        const ids = new Set(currentGroup.studentIds);
-        return allStudents.filter(s => ids.has(s.studentId));
-    }, [currentGroup, allStudents]);
-
-    const availableStudents: StudentResponse[] = useMemo(() => {
-        if (!currentGroup) return [];
-        const ids = new Set(currentGroup.studentIds);
-        return allStudents.filter(s => !ids.has(s.studentId));
-    }, [currentGroup, allStudents]);
 
     const openStudentsForm = (g: GroupResponse) => {
         if (!isAdmin) return;
+
         setStudentsGroupId(g.id);
         setStudentsError(null);
         setStudentToAddStudentId('');
@@ -224,17 +275,36 @@ export const GroupsListPage: React.FC = () => {
 
     const handleAddStudent: React.FormEventHandler = async e => {
         e.preventDefault();
+
         if (!isAdmin || !studentsGroupId || !studentToAddStudentId) return;
+
+        if (!currentGroup) {
+            setStudentsError(PRECONDITION_MESSAGE);
+            return;
+        }
 
         setStudentsProcessing(true);
         setStudentsError(null);
+
         try {
-            const updated = await groupsApi.addStudent(studentsGroupId, studentToAddStudentId);
+            const updated = await groupsApi.addStudent(
+                studentsGroupId,
+                studentToAddStudentId,
+                currentGroup.version,
+            );
+
             setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
             setStudentToAddStudentId('');
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setStudentsError('Не удалось добавить студента в группу');
+
+            if (err?.status === 409) {
+                setStudentsError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setStudentsError(PRECONDITION_MESSAGE);
+            } else {
+                setStudentsError('Не удалось добавить студента в группу');
+            }
         } finally {
             setStudentsProcessing(false);
         }
@@ -243,14 +313,32 @@ export const GroupsListPage: React.FC = () => {
     const handleRemoveStudent = async (studentId: string) => {
         if (!isAdmin || !studentsGroupId) return;
 
+        if (!currentGroup) {
+            setStudentsError(PRECONDITION_MESSAGE);
+            return;
+        }
+
         setStudentsProcessing(true);
         setStudentsError(null);
+
         try {
-            const updated = await groupsApi.removeStudent(studentsGroupId, studentId);
+            const updated = await groupsApi.removeStudent(
+                studentsGroupId,
+                studentId,
+                currentGroup.version,
+            );
+
             setItems(prev => prev.map(g => (g.id === updated.id ? updated : g)));
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setStudentsError('Не удалось удалить студента из группы');
+
+            if (err?.status === 409) {
+                setStudentsError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setStudentsError(PRECONDITION_MESSAGE);
+            } else {
+                setStudentsError('Не удалось удалить студента из группы');
+            }
         } finally {
             setStudentsProcessing(false);
         }
@@ -268,9 +356,11 @@ export const GroupsListPage: React.FC = () => {
         const idxStudentIds = header.indexOf('studentIds');
 
         const rows: CsvRow[] = [];
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
+
             const parts = line.split(',');
 
             const name = (parts[0] ?? '').trim();
@@ -282,7 +372,10 @@ export const GroupsListPage: React.FC = () => {
             if (idxStudentIds >= 0) {
                 const raw = (parts[idxStudentIds] ?? '').trim();
                 if (raw) {
-                    studentIds = raw.split(';').map(s => s.trim()).filter(Boolean);
+                    studentIds = raw
+                        .split(';')
+                        .map(s => s.trim())
+                        .filter(Boolean);
                 }
             }
 
@@ -294,6 +387,7 @@ export const GroupsListPage: React.FC = () => {
                 rowNumber: i + 1,
             });
         }
+
         return rows;
     };
 
@@ -332,11 +426,15 @@ export const GroupsListPage: React.FC = () => {
                             size: row.size,
                         });
 
-                        // добавление студентов — внутри задачи (параллельно между группами)
                         let current = created;
+
                         if (row.studentIds && row.studentIds.length > 0) {
-                            for (const sid of row.studentIds) {
-                                current = await groupsApi.addStudent(current.id, sid);
+                            for (const studentId of row.studentIds) {
+                                current = await groupsApi.addStudent(
+                                    current.id,
+                                    studentId,
+                                    current.version,
+                                );
                             }
                         }
 
@@ -346,7 +444,11 @@ export const GroupsListPage: React.FC = () => {
                             err?.body?.message ??
                             (typeof err?.message === 'string' ? err.message : null) ??
                             'ошибка создания группы';
-                        throw {rowNumber: row.rowNumber, message: msg};
+
+                        throw {
+                            rowNumber: row.rowNumber,
+                            message: msg,
+                        };
                     }
                 });
             }
@@ -358,9 +460,13 @@ export const GroupsListPage: React.FC = () => {
             }
 
             const errors: string[] = [...validationErrors];
+
             for (const e of taskErrors) {
-                if (e.rowNumber) errors.push(`Строка ${e.rowNumber}: ${e.message}`);
-                else errors.push(e.message);
+                if (e.rowNumber) {
+                    errors.push(`Строка ${e.rowNumber}: ${e.message}`);
+                } else {
+                    errors.push(e.message);
+                }
             }
 
             const summary = [
@@ -415,6 +521,7 @@ export const GroupsListPage: React.FC = () => {
                 <form className={styles.studentsForm} onSubmit={handleAddStudent}>
                     <div className={styles.studentsHeader}>
                         <strong>Студенты группы {currentGroup.code}</strong>
+
                         <Button type="button" variant="ghost" onClick={closeStudentsForm}>
                             Закрыть
                         </Button>
@@ -424,12 +531,14 @@ export const GroupsListPage: React.FC = () => {
                         {currentGroupStudents.length === 0 && (
                             <li className={styles.empty}>В группе пока нет студентов.</li>
                         )}
+
                         {currentGroupStudents.map(s => (
                             <li key={s.id} className={styles.studentsRow}>
                                 <span>
                                     {s.fullName}{' '}
                                     <span className={styles.studentId}>({s.studentId})</span>
                                 </span>
+
                                 <Button
                                     type="button"
                                     variant="ghost"
@@ -449,12 +558,14 @@ export const GroupsListPage: React.FC = () => {
                             onChange={e => setStudentToAddStudentId(e.target.value)}
                         >
                             <option value="">Выберите студента…</option>
+
                             {availableStudents.map(s => (
                                 <option key={s.id} value={s.studentId}>
                                     {s.fullName} ({s.studentId})
                                 </option>
                             ))}
                         </select>
+
                         <Button type="submit" disabled={!studentToAddStudentId || studentsProcessing}>
                             Добавить в группу
                         </Button>
@@ -475,17 +586,25 @@ export const GroupsListPage: React.FC = () => {
                     <FormField label="Название группы">
                         <Input value={name} onChange={e => setName(e.target.value)} />
                     </FormField>
+
                     <FormField label="Код группы">
                         <Input value={code} onChange={e => setCode(e.target.value)} />
                     </FormField>
+
                     <FormField label="Размер (кол-во мест)">
-                        <Input type="number" min={1} value={size} onChange={e => setSize(e.target.value)} />
+                        <Input
+                            type="number"
+                            min={1}
+                            value={size}
+                            onChange={e => setSize(e.target.value)}
+                        />
                     </FormField>
 
                     <div className={crudStyles.formActions}>
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -507,26 +626,30 @@ export const GroupsListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(g => (
                         <tr key={g.id}>
                             <td>{g.code}</td>
                             <td>{g.name}</td>
                             <td>{g.size}</td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button variant="ghost" type="button" onClick={() => openEditForm(g)}>
                                         Редактировать
                                     </Button>
+
                                     <Button variant="ghost" type="button" onClick={() => openStudentsForm(g)}>
                                         Студенты
                                     </Button>
+
                                     {g.status === 'ACTIVE' ? (
-                                        <Button variant="ghost" type="button" onClick={() => handleArchive(g.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(g)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button variant="ghost" type="button" onClick={() => handleActivate(g.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(g)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -534,6 +657,7 @@ export const GroupsListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 4 : 3}>Нет групп</td>

@@ -32,6 +32,10 @@ public class Semester {
     @GeneratedValue
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(nullable = false, length = 64)
     private String code;
 

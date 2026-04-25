@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.schedule.semester.dto.CreateSemesterRequest;
 import ru.nsu.university.timetable.schedule.semester.dto.SemesterResponse;
 import ru.nsu.university.timetable.schedule.semester.dto.UpdateSemesterRequest;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,19 +37,22 @@ public class SemesterController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public SemesterResponse update(@PathVariable UUID id,
+                                   @RequestHeader(name = "If-Match", required = false) String ifMatch,
                                    @RequestBody @Validated UpdateSemesterRequest req) {
-        return service.update(id, req);
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @PostMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
-    public SemesterResponse archive(@PathVariable UUID id) {
-        return service.archive(id);
+    public SemesterResponse archive(@PathVariable UUID id,
+                                    @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.archive(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{id}/activate")
     @PreAuthorize("hasRole('ADMIN')")
-    public SemesterResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    public SemesterResponse activate(@PathVariable UUID id,
+                                     @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.activate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 }

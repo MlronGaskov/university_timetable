@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.schedule.course.dto.CourseResponse;
 import ru.nsu.university.timetable.schedule.course.dto.CreateCourseRequest;
 import ru.nsu.university.timetable.schedule.course.dto.UpdateCourseRequest;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -36,33 +37,38 @@ public class CourseController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public CourseResponse update(@PathVariable UUID id,
+                                 @RequestHeader(name = "If-Match", required = false) String ifMatch,
                                  @RequestBody @Validated UpdateCourseRequest req) {
-        return service.update(id, req);
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @PostMapping("/{id}/archive")
     @PreAuthorize("hasRole('ADMIN')")
-    public CourseResponse archive(@PathVariable UUID id) {
-        return service.archive(id);
+    public CourseResponse archive(@PathVariable UUID id,
+                                  @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.archive(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{id}/activate")
     @PreAuthorize("hasRole('ADMIN')")
-    public CourseResponse activate(@PathVariable UUID id) {
-        return service.activate(id);
+    public CourseResponse activate(@PathVariable UUID id,
+                                   @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.activate(id, IfMatchVersion.parseRequired(ifMatch));
     }
 
     @PostMapping("/{courseId}/groups/{groupCode}")
     @PreAuthorize("hasRole('ADMIN')")
     public CourseResponse addGroup(@PathVariable UUID courseId,
-                                   @PathVariable String groupCode) {
-        return service.addGroup(courseId, groupCode);
+                                   @PathVariable String groupCode,
+                                   @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.addGroup(courseId, IfMatchVersion.parseRequired(ifMatch), groupCode);
     }
 
     @DeleteMapping("/{courseId}/groups/{groupCode}")
     @PreAuthorize("hasRole('ADMIN')")
     public CourseResponse removeGroup(@PathVariable UUID courseId,
-                                      @PathVariable String groupCode) {
-        return service.removeGroup(courseId, groupCode);
+                                      @PathVariable String groupCode,
+                                      @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        return service.removeGroup(courseId, IfMatchVersion.parseRequired(ifMatch), groupCode);
     }
 }

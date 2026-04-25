@@ -1,5 +1,9 @@
-import {http} from './http';
-import type {CreatePolicyRequest, PolicyResponse, UpdatePolicyRequest,} from '@/types/policies';
+import {http, ifMatchHeaders} from './http';
+import type {
+    CreatePolicyRequest,
+    PolicyResponse,
+    UpdatePolicyRequest,
+} from '@/types/policies';
 import type {UUID} from '@/types/common';
 
 const BASE_PATH = '/api/policies';
@@ -14,7 +18,9 @@ export const policiesApi = {
     },
 
     getByName(name: string) {
-        return http<PolicyResponse>(`${BASE_PATH}/by-name/${encodeURIComponent(name)}`);
+        return http<PolicyResponse>(
+            `${BASE_PATH}/by-name/${encodeURIComponent(name)}`
+        );
     },
 
     create(body: CreatePolicyRequest) {
@@ -24,16 +30,18 @@ export const policiesApi = {
         });
     },
 
-    update(id: UUID, body: UpdatePolicyRequest) {
+    update(id: UUID, body: UpdatePolicyRequest, version: number) {
         return http<PolicyResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
+            headers: ifMatchHeaders(version),
             body: JSON.stringify(body),
         });
     },
 
-    delete(id: UUID) {
+    delete(id: UUID, version: number) {
         return http<void>(`${BASE_PATH}/${id}`, {
             method: 'DELETE',
+            headers: ifMatchHeaders(version),
         });
     },
 };

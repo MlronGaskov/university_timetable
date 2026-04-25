@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record GroupResponse(
         UUID id,
+        long version,
         String name,
         String code,
         int size,

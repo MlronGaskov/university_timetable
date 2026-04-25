@@ -3,7 +3,6 @@ import {Link} from 'react-router-dom';
 import {Page} from '@/components/layout/Page';
 import {semestersApi} from '@/api/semesters';
 import type {CreateSemesterRequest, SemesterResponse, UpdateSemesterRequest} from '@/types/semesters';
-import {formatDate} from '@/utils/formatters';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
 import {Input} from '@/components/ui/Input';
 import {FormField} from '@/components/ui/FormField';
@@ -31,6 +30,12 @@ type ImportTaskError = {
     message: string;
 };
 
+const CONFLICT_MESSAGE =
+    'Семестр уже был изменён другим пользователем. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию семестра. Обновите страницу и повторите попытку.';
+
 const runWithLimit = async <T,>(
     tasks: Array<() => Promise<T>>,
     limit: number,
@@ -43,6 +48,7 @@ const runWithLimit = async <T,>(
         while (true) {
             const idx = i++;
             if (idx >= tasks.length) return;
+
             try {
                 const r = await tasks[idx]();
                 results.push(r);
@@ -80,14 +86,17 @@ const splitCsvLine = (line: string): string[] => {
             current += ch;
         }
     }
+
     result.push(current);
     return result;
 };
 
 const toDateInputValue = (iso: string | null | undefined): string => {
     if (!iso) return '';
+
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return '';
+
     return d.toISOString().slice(0, 10);
 };
 
@@ -99,7 +108,8 @@ const parseIdsFromInput = (value: string): string[] =>
 
 const formatIdsToInput = (ids: string[]): string => ids.join(';');
 
-const dateToInstant = (date: string): string => new Date(date + 'T00:00:00Z').toISOString();
+const dateToInstant = (date: string): string =>
+    new Date(date + 'T00:00:00Z').toISOString();
 
 export const SemestersListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
@@ -109,6 +119,8 @@ export const SemestersListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
+
     const [code, setCode] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -125,6 +137,7 @@ export const SemestersListPage: React.FC = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+
             try {
                 const data = await semestersApi.getAll();
                 setItems(data);
@@ -139,6 +152,7 @@ export const SemestersListPage: React.FC = () => {
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setCode('');
         setStartDate('');
         setEndDate('');
@@ -156,6 +170,7 @@ export const SemestersListPage: React.FC = () => {
     const openEditForm = (s: SemesterResponse) => {
         setFormMode('edit');
         setEditingId(s.id);
+        setEditingVersion(s.version);
         setCode(s.code);
         setStartDate(toDateInputValue(s.startAt));
         setEndDate(toDateInputValue(s.endAt));
@@ -167,6 +182,7 @@ export const SemestersListPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!isAdmin) return;
 
         if (!code.trim() || !startDate.trim() || !endDate.trim() || !policyName.trim()) {
@@ -190,10 +206,23 @@ export const SemestersListPage: React.FC = () => {
 
         try {
             if (formMode === 'create') {
-                const body: CreateSemesterRequest = {code: code.trim(), ...base};
+                const body: CreateSemesterRequest = {
+                    code: code.trim(),
+                    ...base,
+                };
+
                 const created = await semestersApi.create(body);
                 setItems(prev => [...prev, created]);
-            } else if (formMode === 'edit' && editingId) {
+                resetForm();
+                return;
+            }
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
                 const body: UpdateSemesterRequest = {
                     code: code.trim(),
                     startAt: base.startAt,
@@ -202,37 +231,61 @@ export const SemestersListPage: React.FC = () => {
                     courseCodes: base.courseCodes,
                     roomCodes: base.roomCodes,
                 };
-                const updated = await semestersApi.update(editingId, body);
+
+                const updated = await semestersApi.update(editingId, body, editingVersion);
                 setItems(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+                resetForm();
             }
-            resetForm();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения семестра');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения семестра');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleArchive = async (id: string) => {
+    const handleArchive = async (semester: SemesterResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await semestersApi.archive(id);
+            const updated = await semestersApi.archive(semester.id, semester.version);
             setItems(prev => prev.map(s => (s.id === updated.id ? updated : s)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось архивировать семестр');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось архивировать семестр');
+            }
         }
     };
 
-    const handleActivate = async (id: string) => {
+    const handleActivate = async (semester: SemesterResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await semestersApi.activate(id);
+            const updated = await semestersApi.activate(semester.id, semester.version);
             setItems(prev => prev.map(s => (s.id === updated.id ? updated : s)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось активировать семестр');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось активировать семестр');
+            }
         }
     };
 
@@ -257,23 +310,36 @@ export const SemestersListPage: React.FC = () => {
         }
 
         const rows: CsvRow[] = [];
+
         for (let i = 1; i < lines.length; i++) {
             const rawLine = lines[i].trim();
             if (!rawLine) continue;
-            const parts = splitCsvLine(rawLine);
 
+            const parts = splitCsvLine(rawLine);
             const safe = (idxN: number) => (parts[idxN] ?? '').trim();
 
             const courseCodes: string[] = [];
             if (idxCourseCodes >= 0) {
                 const raw = safe(idxCourseCodes);
-                if (raw) raw.split(';').map(v => v.trim()).filter(Boolean).forEach(v => courseCodes.push(v));
+                if (raw) {
+                    raw
+                        .split(';')
+                        .map(v => v.trim())
+                        .filter(Boolean)
+                        .forEach(v => courseCodes.push(v));
+                }
             }
 
             const roomCodes: string[] = [];
             if (idxRoomCodes >= 0) {
                 const raw = safe(idxRoomCodes);
-                if (raw) raw.split(';').map(v => v.trim()).filter(Boolean).forEach(v => roomCodes.push(v));
+                if (raw) {
+                    raw
+                        .split(';')
+                        .map(v => v.trim())
+                        .filter(Boolean)
+                        .forEach(v => roomCodes.push(v));
+                }
             }
 
             rows.push({
@@ -286,6 +352,7 @@ export const SemestersListPage: React.FC = () => {
                 rowNumber: i + 1,
             });
         }
+
         return rows;
     };
 
@@ -326,13 +393,18 @@ export const SemestersListPage: React.FC = () => {
                             courseCodes: row.courseCodes,
                             roomCodes: row.roomCodes,
                         };
+
                         return await semestersApi.create(body);
                     } catch (err: any) {
                         const msg =
                             err?.body?.message ??
                             (typeof err?.message === 'string' ? err.message : null) ??
                             'ошибка создания семестра';
-                        throw {rowNumber: row.rowNumber, message: msg};
+
+                        throw {
+                            rowNumber: row.rowNumber,
+                            message: msg,
+                        };
                     }
                 });
             }
@@ -344,9 +416,13 @@ export const SemestersListPage: React.FC = () => {
             }
 
             const errors: string[] = [...validationErrors];
+
             for (const e of taskErrors) {
-                if (e.rowNumber) errors.push(`Строка ${e.rowNumber}: ${e.message}`);
-                else errors.push(e.message);
+                if (e.rowNumber) {
+                    errors.push(`Строка ${e.rowNumber}: ${e.message}`);
+                } else {
+                    errors.push(e.message);
+                }
             }
 
             const summary = [
@@ -439,6 +515,7 @@ export const SemestersListPage: React.FC = () => {
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -467,6 +544,7 @@ export const SemestersListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(s => (
                         <tr key={s.id}>
@@ -477,17 +555,19 @@ export const SemestersListPage: React.FC = () => {
                             <td>
                                 <Link to={`/semesters/${s.code}/schedules`}>Открыть</Link>
                             </td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button variant="ghost" type="button" onClick={() => openEditForm(s)}>
                                         Редактировать
                                     </Button>
+
                                     {s.status === 'ACTIVE' ? (
-                                        <Button variant="ghost" type="button" onClick={() => handleArchive(s.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleArchive(s)}>
                                             Архивировать
                                         </Button>
                                     ) : (
-                                        <Button variant="ghost" type="button" onClick={() => handleActivate(s.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(s)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -495,6 +575,7 @@ export const SemestersListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 6 : 5}>Нет семестров</td>

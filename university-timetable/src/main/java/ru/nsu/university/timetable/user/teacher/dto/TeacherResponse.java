@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record TeacherResponse(
         UUID id,
+        long version,
         String teacherId,
         String fullName,
         Status status,

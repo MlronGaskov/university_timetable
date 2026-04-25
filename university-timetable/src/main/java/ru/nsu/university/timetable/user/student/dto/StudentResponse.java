@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record StudentResponse(
         UUID id,
+        long version,
         String fullName,
         String studentId,
         Status status,

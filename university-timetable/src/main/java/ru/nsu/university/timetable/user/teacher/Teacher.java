@@ -37,6 +37,10 @@ public class Teacher {
     @GeneratedValue
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(name = "teacher_id", nullable = false, length = 64)
     private String teacherId;
 

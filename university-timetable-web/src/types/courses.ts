@@ -33,6 +33,7 @@ export interface CourseResponse {
     teacherId: string;
     groupCodes: string[];
     equipmentRequirements: CourseEquipmentItemDto[];
+    version: number;
     createdAt: string;
     updatedAt: string;
 }

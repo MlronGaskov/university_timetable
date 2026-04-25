@@ -31,6 +31,10 @@ public class Group {
     @GeneratedValue
     private UUID id;
 
+    @Version
+    @Column(nullable = false)
+    private long version;
+
     @Column(nullable = false, length = 128)
     private String name;
 

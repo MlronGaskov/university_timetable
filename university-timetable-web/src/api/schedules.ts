@@ -8,7 +8,7 @@ import type {UUID} from '@/types/common';
 export const schedulesApi = {
     getForSemester(semesterCode: string) {
         return http<ScheduleSummaryResponse[]>(
-            `/api/semesters/${semesterCode}/schedules`,
+            `/api/semesters/${encodeURIComponent(semesterCode)}/schedules`
         );
     },
 
@@ -18,10 +18,10 @@ export const schedulesApi = {
 
     generateForSemester(semesterCode: string) {
         return http<ScheduleResponse>(
-            `/api/semesters/${semesterCode}/schedules/generate`,
+            `/api/semesters/${encodeURIComponent(semesterCode)}/schedules/generate`,
             {
                 method: 'POST',
-            },
+            }
         );
     },
 };

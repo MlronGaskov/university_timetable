@@ -13,6 +13,7 @@ import ru.nsu.university.timetable.user.student.Student;
 import ru.nsu.university.timetable.user.student.StudentRepository;
 import ru.nsu.university.timetable.user.teacher.Teacher;
 import ru.nsu.university.timetable.user.teacher.TeacherRepository;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.List;
 import java.util.UUID;
@@ -55,16 +56,16 @@ public class UserService {
 
         applyRoleBindings(user, req.role(), req.teacherId(), req.studentId());
 
-        user = repo.save(user);
+        user = repo.saveAndFlush(user);
 
         return new CreateUserResult(map(user), generated ? raw : null);
     }
 
     @Transactional
-    public UserResponse setPassword(UUID id, String rawPassword) {
-        User u = repo.findById(id).orElseThrow();
+    public UserResponse setPassword(UUID id, long expectedVersion, String rawPassword) {
+        User u = findEntityForMutation(id, expectedVersion);
         u.setPasswordHash(encoder.encode(rawPassword));
-        return map(u);
+        return map(repo.saveAndFlush(u));
     }
 
     @Transactional(readOnly = true)
@@ -78,11 +79,11 @@ public class UserService {
     public UserResponse findOne(UUID id) {
         return repo.findById(id)
                 .map(this::map)
-                .orElseThrow();
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
     }
 
-    public UserResponse update(UUID id, UpdateUserRequest req) {
-        User u = repo.findById(id).orElseThrow();
+    public UserResponse update(UUID id, long expectedVersion, UpdateUserRequest req) {
+        User u = findEntityForMutation(id, expectedVersion);
 
         if (req.email() != null) {
             u.setEmail(req.email());
@@ -104,19 +105,26 @@ public class UserService {
             u.setStatus(req.status());
         }
 
-        return map(u);
+        return map(repo.saveAndFlush(u));
     }
 
-    public UserResponse deactivate(UUID id) {
-        User u = repo.findById(id).orElseThrow();
+    public UserResponse deactivate(UUID id, long expectedVersion) {
+        User u = findEntityForMutation(id, expectedVersion);
         u.setStatus(Status.INACTIVE);
-        return map(u);
+        return map(repo.saveAndFlush(u));
     }
 
-    public UserResponse activate(UUID id) {
-        User u = repo.findById(id).orElseThrow();
+    public UserResponse activate(UUID id, long expectedVersion) {
+        User u = findEntityForMutation(id, expectedVersion);
         u.setStatus(Status.ACTIVE);
-        return map(u);
+        return map(repo.saveAndFlush(u));
+    }
+
+    private User findEntityForMutation(UUID id, long expectedVersion) {
+        User u = repo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+        OptimisticLockingGuard.verifyVersion("User", id, expectedVersion, u.getVersion());
+        return u;
     }
 
     private void applyRoleBindings(User user, Role role, String teacherId, String studentId) {
@@ -195,6 +203,7 @@ public class UserService {
 
         return new UserResponse(
                 u.getId(),
+                u.getVersion(),
                 u.getLogin(),
                 u.getEmail(),
                 u.getStatus(),

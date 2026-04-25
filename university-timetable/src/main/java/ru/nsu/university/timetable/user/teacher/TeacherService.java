@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.user.teacher.dto.*;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.time.DayOfWeek;
 import java.util.*;
@@ -30,7 +31,7 @@ public class TeacherService {
                 .status(Status.ACTIVE)
                 .build();
 
-        return map(repo.save(t));
+        return map(repo.saveAndFlush(t));
     }
 
     @Transactional(readOnly = true)
@@ -44,11 +45,11 @@ public class TeacherService {
     public TeacherResponse findOne(UUID id) {
         return repo.findById(id)
                 .map(this::map)
-                .orElseThrow();
+                .orElseThrow(() -> new IllegalArgumentException("Teacher not found: " + id));
     }
 
-    public TeacherResponse update(UUID id, UpdateTeacherRequest req) {
-        Teacher t = repo.findById(id).orElseThrow();
+    public TeacherResponse update(UUID id, long expectedVersion, UpdateTeacherRequest req) {
+        Teacher t = findEntityForMutation(id, expectedVersion);
 
         if (req.teacherId() != null && !req.teacherId().equalsIgnoreCase(t.getTeacherId())) {
             if (repo.existsByTeacherId(req.teacherId())) {
@@ -69,85 +70,61 @@ public class TeacherService {
             t.setPreferredWorkingHours(validated);
         }
 
-        return map(t);
+        return map(repo.saveAndFlush(t));
     }
 
-    public TeacherResponse archive(UUID id) {
-        Teacher t = repo.findById(id).orElseThrow();
+    public TeacherResponse archive(UUID id, long expectedVersion) {
+        Teacher t = findEntityForMutation(id, expectedVersion);
         t.setStatus(Status.INACTIVE);
-        return map(t);
+        return map(repo.saveAndFlush(t));
     }
 
-    public TeacherResponse activate(UUID id) {
-        Teacher t = repo.findById(id).orElseThrow();
+    public TeacherResponse activate(UUID id, long expectedVersion) {
+        Teacher t = findEntityForMutation(id, expectedVersion);
         t.setStatus(Status.ACTIVE);
-        return map(t);
+        return map(repo.saveAndFlush(t));
     }
 
-    public TeacherResponse updateWorkingHours(UUID teacherId, UpdateWorkingHoursRequest req) {
-        Teacher t = repo.findById(teacherId).orElseThrow();
+    public TeacherResponse updateWorkingHours(UUID teacherId, long expectedVersion, UpdateWorkingHoursRequest req) {
+        Teacher t = findEntityForMutation(teacherId, expectedVersion);
+        t.setPreferredWorkingHours(toEntityWorkingHours(req.preferredWorkingHours()));
+        return map(repo.saveAndFlush(t));
+    }
 
-        Set<TeacherWorkingHours> validated = toEntityWorkingHours(req.preferredWorkingHours());
-        t.setPreferredWorkingHours(validated);
-
-        return map(t);
+    private Teacher findEntityForMutation(UUID id, long expectedVersion) {
+        Teacher t = repo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Teacher not found: " + id));
+        OptimisticLockingGuard.verifyVersion("Teacher", id, expectedVersion, t.getVersion());
+        return t;
     }
 
     private TeacherResponse map(Teacher t) {
-        List<WorkingIntervalDto> hours = t.getPreferredWorkingHours().stream()
+        List<WorkingIntervalDto> wh = t.getPreferredWorkingHours().stream()
                 .sorted(Comparator
                         .comparing(TeacherWorkingHours::getDay)
                         .thenComparing(TeacherWorkingHours::getStartTime))
-                .map(h -> new WorkingIntervalDto(h.getDay(), h.getStartTime(), h.getEndTime()))
+                .map(w -> new WorkingIntervalDto(w.getDay(), w.getStartTime(), w.getEndTime()))
                 .toList();
 
         return new TeacherResponse(
                 t.getId(),
+                t.getVersion(),
                 t.getTeacherId(),
                 t.getFullName(),
                 t.getStatus(),
-                hours,
+                wh,
                 t.getCreatedAt(),
                 t.getUpdatedAt()
         );
     }
 
     private Set<TeacherWorkingHours> toEntityWorkingHours(List<WorkingIntervalDto> dtos) {
-        if (dtos == null || dtos.isEmpty()) {
-            return Collections.emptySet();
+        if (dtos == null) {
+            return new LinkedHashSet<>();
         }
 
-        Map<DayOfWeek, List<WorkingIntervalDto>> byDay = dtos.stream()
-                .collect(Collectors.groupingBy(WorkingIntervalDto::day));
-
-        for (var entry : byDay.entrySet()) {
-            DayOfWeek day = entry.getKey();
-            if (day == DayOfWeek.SUNDAY) {
-                throw new IllegalArgumentException("Sunday is not allowed in working hours");
-            }
-
-            List<WorkingIntervalDto> intervals = entry.getValue().stream()
-                    .sorted(Comparator.comparing(WorkingIntervalDto::startTime))
-                    .toList();
-
-            for (int i = 0; i < intervals.size(); i++) {
-                WorkingIntervalDto current = intervals.get(i);
-
-                if (!current.startTime().isBefore(current.endTime())) {
-                    throw new IllegalArgumentException(
-                            "Invalid interval for " + day + ": start must be before end"
-                    );
-                }
-
-                if (i > 0) {
-                    WorkingIntervalDto prev = intervals.get(i - 1);
-                    if (prev.endTime().isAfter(current.startTime())) {
-                        throw new IllegalArgumentException(
-                                "Overlapping intervals for " + day + " are not allowed"
-                        );
-                    }
-                }
-            }
+        for (WorkingIntervalDto dto : dtos) {
+            validateInterval(dto);
         }
 
         return dtos.stream()
@@ -157,5 +134,18 @@ public class TeacherService {
                         .endTime(d.endTime())
                         .build())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private void validateInterval(WorkingIntervalDto dto) {
+        if (dto.day() == null) {
+            throw new IllegalArgumentException("day must not be null");
+        }
+        if (dto.startTime() == null || dto.endTime() == null) {
+            throw new IllegalArgumentException("startTime and endTime must not be null");
+        }
+        if (!dto.startTime().isBefore(dto.endTime())) {
+            throw new IllegalArgumentException("startTime must be before endTime");
+        }
+        DayOfWeek ignored = dto.day();
     }
 }

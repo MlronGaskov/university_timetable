@@ -18,6 +18,7 @@ export interface GroupResponse {
     code: string;
     size: number;
     status: Status;
+    version: number;
     createdAt: string;
     updatedAt: string;
     studentIds: string[];

@@ -7,6 +7,7 @@ import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.schedule.semester.dto.CreateSemesterRequest;
 import ru.nsu.university.timetable.schedule.semester.dto.SemesterResponse;
 import ru.nsu.university.timetable.schedule.semester.dto.UpdateSemesterRequest;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,7 +37,7 @@ public class SemesterService {
                 .roomCodes(normalizeList(req.roomCodes()))
                 .build();
 
-        return map(semesterRepository.save(semester));
+        return map(semesterRepository.saveAndFlush(semester));
     }
 
     @Transactional(readOnly = true)
@@ -53,9 +54,8 @@ public class SemesterService {
         return map(s);
     }
 
-    public SemesterResponse update(UUID id, UpdateSemesterRequest req) {
-        Semester semester = semesterRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
+    public SemesterResponse update(UUID id, long expectedVersion, UpdateSemesterRequest req) {
+        Semester semester = findEntityForMutation(id, expectedVersion);
 
         if (req.code() != null && !req.code().equalsIgnoreCase(semester.getCode())) {
             if (semesterRepository.existsByCodeIgnoreCase(req.code())) {
@@ -86,21 +86,26 @@ public class SemesterService {
             semester.setRoomCodes(normalizeList(req.roomCodes()));
         }
 
-        return map(semester);
+        return map(semesterRepository.saveAndFlush(semester));
     }
 
-    public SemesterResponse archive(UUID id) {
-        Semester semester = semesterRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
+    public SemesterResponse archive(UUID id, long expectedVersion) {
+        Semester semester = findEntityForMutation(id, expectedVersion);
         semester.setStatus(Status.INACTIVE);
-        return map(semester);
+        return map(semesterRepository.saveAndFlush(semester));
     }
 
-    public SemesterResponse activate(UUID id) {
+    public SemesterResponse activate(UUID id, long expectedVersion) {
+        Semester semester = findEntityForMutation(id, expectedVersion);
+        semester.setStatus(Status.ACTIVE);
+        return map(semesterRepository.saveAndFlush(semester));
+    }
+
+    private Semester findEntityForMutation(UUID id, long expectedVersion) {
         Semester semester = semesterRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + id));
-        semester.setStatus(Status.ACTIVE);
-        return map(semester);
+        OptimisticLockingGuard.verifyVersion("Semester", id, expectedVersion, semester.getVersion());
+        return semester;
     }
 
     private List<String> normalizeList(List<String> list) {
@@ -119,6 +124,7 @@ public class SemesterService {
     private SemesterResponse map(Semester s) {
         return new SemesterResponse(
                 s.getId(),
+                s.getVersion(),
                 s.getCode(),
                 s.getStartAt(),
                 s.getEndAt(),

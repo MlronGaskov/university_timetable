@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record RoomResponse(
         UUID id,
+        long version,
         String roomCode,
         String building,
         String number,

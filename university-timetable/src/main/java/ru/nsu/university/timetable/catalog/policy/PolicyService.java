@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.catalog.policy.dto.CreatePolicyRequest;
 import ru.nsu.university.timetable.catalog.policy.dto.PolicyResponse;
 import ru.nsu.university.timetable.catalog.policy.dto.UpdatePolicyRequest;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.io.IOException;
 import java.util.List;
@@ -41,12 +42,11 @@ public class PolicyService {
                 .weightsJson(req.weightsJson())
                 .build();
 
-        return map(repository.save(policy));
+        return map(repository.saveAndFlush(policy));
     }
 
-    public PolicyResponse update(UUID id, UpdatePolicyRequest req) {
-        Policy policy = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Policy not found: " + id));
+    public PolicyResponse update(UUID id, long expectedVersion, UpdatePolicyRequest req) {
+        Policy policy = findEntityForMutation(id, expectedVersion);
 
         if (req.name() != null && !req.name().equalsIgnoreCase(policy.getName())) {
             if (repository.existsByNameIgnoreCase(req.name())) {
@@ -80,14 +80,13 @@ public class PolicyService {
             policy.setWeightsJson(req.weightsJson());
         }
 
-        return map(policy);
+        return map(repository.saveAndFlush(policy));
     }
 
-    public void delete(UUID id) {
-        if (!repository.existsById(id)) {
-            throw new IllegalArgumentException("Policy not found: " + id);
-        }
-        repository.deleteById(id);
+    public void delete(UUID id, long expectedVersion) {
+        Policy policy = findEntityForMutation(id, expectedVersion);
+        repository.delete(policy);
+        repository.flush();
     }
 
     @Transactional(readOnly = true)
@@ -111,6 +110,13 @@ public class PolicyService {
                 .orElseThrow(() -> new IllegalArgumentException("Policy not found: " + name));
     }
 
+    private Policy findEntityForMutation(UUID id, long expectedVersion) {
+        Policy policy = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Policy not found: " + id));
+        OptimisticLockingGuard.verifyVersion("Policy", id, expectedVersion, policy.getVersion());
+        return policy;
+    }
+
     private void validateAllJson(String grid, String breaks, String limits, String travel, String weights) {
         validateJson(grid, "gridJson");
         validateJson(breaks, "breaksJson");
@@ -130,6 +136,7 @@ public class PolicyService {
     private PolicyResponse map(Policy p) {
         return new PolicyResponse(
                 p.getId(),
+                p.getVersion(),
                 p.getName(),
                 p.getGridJson(),
                 p.getBreaksJson(),

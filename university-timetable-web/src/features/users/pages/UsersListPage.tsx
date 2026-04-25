@@ -24,7 +24,16 @@ interface CsvRow {
     rowNumber: number;
 }
 
-type ImportTaskError = {rowNumber: number; message: string};
+type ImportTaskError = {
+    rowNumber: number;
+    message: string;
+};
+
+const CONFLICT_MESSAGE =
+    'Пользователь уже был изменён другим администратором. Обновите данные и повторите попытку.';
+
+const PRECONDITION_MESSAGE =
+    'Не удалось определить версию пользователя. Обновите страницу и повторите попытку.';
 
 const runWithLimit = async <T,>(
     tasks: Array<() => Promise<T>>,
@@ -38,6 +47,7 @@ const runWithLimit = async <T,>(
         while (true) {
             const idx = i++;
             if (idx >= tasks.length) return;
+
             try {
                 const r = await tasks[idx]();
                 results.push(r);
@@ -61,6 +71,7 @@ export const UsersListPage: React.FC = () => {
 
     const [formMode, setFormMode] = useState<'create' | 'edit' | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingVersion, setEditingVersion] = useState<number | null>(null);
 
     const [loginValue, setLoginValue] = useState('');
     const [email, setEmail] = useState('');
@@ -81,6 +92,7 @@ export const UsersListPage: React.FC = () => {
     useEffect(() => {
         (async () => {
             setLoading(true);
+
             try {
                 const data = await usersApi.getAll();
                 setItems(data);
@@ -95,6 +107,7 @@ export const UsersListPage: React.FC = () => {
     const resetForm = () => {
         setFormMode(null);
         setEditingId(null);
+        setEditingVersion(null);
         setLoginValue('');
         setEmail('');
         setRole('STUDENT');
@@ -112,6 +125,7 @@ export const UsersListPage: React.FC = () => {
     const openEditForm = (u: UserResponse) => {
         setFormMode('edit');
         setEditingId(u.id);
+        setEditingVersion(u.version);
         setLoginValue(u.login);
         setEmail(u.email);
         setRole(u.role);
@@ -123,6 +137,7 @@ export const UsersListPage: React.FC = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
         if (!isAdmin) return;
 
         if (!loginValue.trim() || !email.trim() || !role) {
@@ -145,6 +160,7 @@ export const UsersListPage: React.FC = () => {
                     teacherId: teacherId.trim() || null,
                     studentId: studentId.trim() || null,
                 };
+
                 const res = await usersApi.create(body);
                 setItems(prev => [...prev, res.user]);
 
@@ -152,58 +168,112 @@ export const UsersListPage: React.FC = () => {
                     setLastTempPassword(res.tempPassword);
                     setLastTempLogin(res.user.login);
                 }
-            } else if (formMode === 'edit' && editingId) {
-                const updated = await usersApi.update(editingId, {
-                    email: email.trim(),
-                    role,
-                    teacherId: teacherId.trim() || null,
-                    studentId: studentId.trim() || null,
-                });
+
+                resetForm();
+                return;
+            }
+
+            if (formMode === 'edit' && editingId) {
+                if (editingVersion == null) {
+                    setFormError(PRECONDITION_MESSAGE);
+                    return;
+                }
+
+                const updated = await usersApi.update(
+                    editingId,
+                    {
+                        email: email.trim(),
+                        role,
+                        teacherId: teacherId.trim() || null,
+                        studentId: studentId.trim() || null,
+                    },
+                    editingVersion,
+                );
 
                 setItems(prev => prev.map(u => (u.id === updated.id ? updated : u)));
 
                 const newPassword = password.trim();
+
                 if (newPassword) {
                     try {
-                        const updatedWithPassword = await usersApi.setPassword(editingId, {
-                            newPassword: newPassword,
-                        });
-                        setItems(prev => prev.map(u => (u.id === updatedWithPassword.id ? updatedWithPassword : u)));
-                    } catch (err) {
+                        const updatedWithPassword = await usersApi.setPassword(
+                            editingId,
+                            {
+                                newPassword,
+                            },
+                            updated.version,
+                        );
+
+                        setItems(prev =>
+                            prev.map(u => (u.id === updatedWithPassword.id ? updatedWithPassword : u)),
+                        );
+                    } catch (err: any) {
                         console.error(err);
-                        setFormError('Пользователь обновлён, но пароль не удалось изменить');
+
+                        if (err?.status === 409) {
+                            setFormError(CONFLICT_MESSAGE);
+                        } else if (err?.status === 428) {
+                            setFormError(PRECONDITION_MESSAGE);
+                        } else {
+                            setFormError('Пользователь обновлён, но пароль не удалось изменить');
+                        }
+
                         return;
                     }
                 }
+
+                resetForm();
             }
-            resetForm();
-        } catch (err) {
+        } catch (err: any) {
             console.error(err);
-            setFormError('Ошибка сохранения пользователя');
+
+            if (err?.status === 409) {
+                setFormError(CONFLICT_MESSAGE);
+            } else if (err?.status === 428) {
+                setFormError(PRECONDITION_MESSAGE);
+            } else {
+                setFormError('Ошибка сохранения пользователя');
+            }
         } finally {
             setSaving(false);
         }
     };
 
-    const handleDeactivate = async (id: string) => {
+    const handleDeactivate = async (user: UserResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await usersApi.deactivate(id);
+            const updated = await usersApi.deactivate(user.id, user.version);
             setItems(prev => prev.map(u => (u.id === updated.id ? updated : u)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось деактивировать пользователя');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось деактивировать пользователя');
+            }
         }
     };
 
-    const handleActivate = async (id: string) => {
+    const handleActivate = async (user: UserResponse) => {
         if (!isAdmin) return;
+
         try {
-            const updated = await usersApi.activate(id);
+            const updated = await usersApi.activate(user.id, user.version);
             setItems(prev => prev.map(u => (u.id === updated.id ? updated : u)));
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert('Не удалось активировать пользователя');
+
+            if (e?.status === 409) {
+                alert(CONFLICT_MESSAGE);
+            } else if (e?.status === 428) {
+                alert(PRECONDITION_MESSAGE);
+            } else {
+                alert('Не удалось активировать пользователя');
+            }
         }
     };
 
@@ -226,9 +296,11 @@ export const UsersListPage: React.FC = () => {
         const idxPassword = idx('password');
 
         const rows: CsvRow[] = [];
+
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
+
             const parts = line.split(',');
 
             const login = (parts[idxLogin] ?? '').trim();
@@ -248,6 +320,7 @@ export const UsersListPage: React.FC = () => {
                 rowNumber: i + 1,
             });
         }
+
         return rows;
     };
 
@@ -275,6 +348,7 @@ export const UsersListPage: React.FC = () => {
                     validationErrors.push(`Строка ${row.rowNumber}: не заполнены login/email/role`);
                     continue;
                 }
+
                 if (!['ADMIN', 'TEACHER', 'STUDENT'].includes(row.role)) {
                     validationErrors.push(`Строка ${row.rowNumber}: некорректная роль "${row.role}"`);
                     continue;
@@ -290,13 +364,18 @@ export const UsersListPage: React.FC = () => {
                             teacherId: row.teacherId,
                             studentId: row.studentId,
                         });
+
                         return createdRes.user;
                     } catch (err: any) {
                         const msg =
                             err?.body?.message ??
                             (typeof err?.message === 'string' ? err.message : null) ??
                             'ошибка создания';
-                        throw {rowNumber: row.rowNumber, message: msg};
+
+                        throw {
+                            rowNumber: row.rowNumber,
+                            message: msg,
+                        };
                     }
                 });
             }
@@ -308,6 +387,7 @@ export const UsersListPage: React.FC = () => {
             }
 
             const errors: string[] = [...validationErrors];
+
             for (const e of taskErrors) {
                 errors.push(`Строка ${e.rowNumber}: ${e.message}`);
             }
@@ -359,6 +439,7 @@ export const UsersListPage: React.FC = () => {
 
     const getUserFio = (u: UserResponse): string => {
         const anyU = u as any;
+
         return (
             anyU.fullName ??
             u.teacherName ??
@@ -382,7 +463,11 @@ export const UsersListPage: React.FC = () => {
             {formMode && (
                 <form className={crudStyles.form} onSubmit={handleSubmit}>
                     <FormField label="Логин">
-                        <Input value={loginValue} onChange={e => setLoginValue(e.target.value)} disabled={formMode === 'edit'} />
+                        <Input
+                            value={loginValue}
+                            onChange={e => setLoginValue(e.target.value)}
+                            disabled={formMode === 'edit'}
+                        />
                     </FormField>
 
                     <FormField label="Email">
@@ -428,6 +513,7 @@ export const UsersListPage: React.FC = () => {
                         <Button type="submit" disabled={saving}>
                             {saving ? 'Сохранение…' : formMode === 'create' ? 'Создать' : 'Сохранить'}
                         </Button>
+
                         <Button type="button" variant="ghost" onClick={resetForm}>
                             Отмена
                         </Button>
@@ -451,6 +537,7 @@ export const UsersListPage: React.FC = () => {
                         {isAdmin && <th align="left">Действия</th>}
                     </tr>
                     </thead>
+
                     <tbody>
                     {items.map(u => (
                         <tr key={u.id}>
@@ -459,17 +546,19 @@ export const UsersListPage: React.FC = () => {
                             <td>{u.role}</td>
                             <td>{u.status}</td>
                             <td>{getUserFio(u)}</td>
+
                             {isAdmin && (
                                 <ActionsCell>
                                     <Button variant="ghost" type="button" onClick={() => openEditForm(u)}>
                                         Редактировать
                                     </Button>
+
                                     {u.status === 'ACTIVE' ? (
-                                        <Button variant="ghost" type="button" onClick={() => handleDeactivate(u.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleDeactivate(u)}>
                                             Деактивировать
                                         </Button>
                                     ) : (
-                                        <Button variant="ghost" type="button" onClick={() => handleActivate(u.id)}>
+                                        <Button variant="ghost" type="button" onClick={() => handleActivate(u)}>
                                             Активировать
                                         </Button>
                                     )}
@@ -477,6 +566,7 @@ export const UsersListPage: React.FC = () => {
                             )}
                         </tr>
                     ))}
+
                     {items.length === 0 && !loading && (
                         <tr>
                             <td colSpan={isAdmin ? 6 : 5}>Нет пользователей</td>

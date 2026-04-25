@@ -11,6 +11,7 @@ import ru.nsu.university.timetable.schedule.course.dto.CourseResponse;
 import ru.nsu.university.timetable.schedule.course.dto.CreateCourseRequest;
 import ru.nsu.university.timetable.schedule.course.dto.UpdateCourseRequest;
 import ru.nsu.university.timetable.user.teacher.TeacherRepository;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,10 +54,9 @@ public class CourseService {
                 .requiredRoomCapacity(0)
                 .build();
 
-        // Вычисляем requiredRoomCapacity после установки groupCodes
         course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
 
-        return map(courseRepository.save(course));
+        return map(courseRepository.saveAndFlush(course));
     }
 
     @Transactional(readOnly = true)
@@ -73,9 +73,8 @@ public class CourseService {
                 .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
     }
 
-    public CourseResponse update(UUID id, UpdateCourseRequest req) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+    public CourseResponse update(UUID id, long expectedVersion, UpdateCourseRequest req) {
+        Course course = findEntityForMutation(id, expectedVersion);
 
         if (req.code() != null && !req.code().equalsIgnoreCase(course.getCode())) {
             if (courseRepository.existsByCodeIgnoreCase(req.code())) {
@@ -109,7 +108,6 @@ public class CourseService {
                 }
             }
             course.setGroupCodes(new ArrayList<>(normalizedGroupCodes));
-            // Пересчитываем requiredRoomCapacity при изменении групп
             course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
@@ -117,28 +115,23 @@ public class CourseService {
             course.setEquipmentRequirements(mapItems(req.equipmentRequirements()));
         }
 
-        return map(course);
+        return map(courseRepository.saveAndFlush(course));
     }
 
-    public CourseResponse archive(UUID id) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
-
+    public CourseResponse archive(UUID id, long expectedVersion) {
+        Course course = findEntityForMutation(id, expectedVersion);
         course.setStatus(Status.INACTIVE);
-        return map(course);
+        return map(courseRepository.saveAndFlush(course));
     }
 
-    public CourseResponse activate(UUID id) {
-        Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
-
+    public CourseResponse activate(UUID id, long expectedVersion) {
+        Course course = findEntityForMutation(id, expectedVersion);
         course.setStatus(Status.ACTIVE);
-        return map(course);
+        return map(courseRepository.saveAndFlush(course));
     }
 
-    public CourseResponse addGroup(UUID courseId, String groupCode) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
+    public CourseResponse addGroup(UUID courseId, long expectedVersion, String groupCode) {
+        Course course = findEntityForMutation(courseId, expectedVersion);
 
         if (groupCode == null || groupCode.isBlank()) {
             throw new IllegalArgumentException("groupCode must not be blank");
@@ -151,25 +144,29 @@ public class CourseService {
 
         if (!course.getGroupCodes().contains(normalized)) {
             course.getGroupCodes().add(normalized);
-            // Пересчитываем requiredRoomCapacity при добавлении группы
             course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
-        return map(course);
+        return map(courseRepository.saveAndFlush(course));
     }
 
-    public CourseResponse removeGroup(UUID courseId, String groupCode) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
+    public CourseResponse removeGroup(UUID courseId, long expectedVersion, String groupCode) {
+        Course course = findEntityForMutation(courseId, expectedVersion);
 
         if (groupCode != null && !groupCode.isBlank()) {
             String normalized = groupCode.trim();
             course.getGroupCodes().remove(normalized);
-            // Пересчитываем requiredRoomCapacity при удалении группы
             course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
-        return map(course);
+        return map(courseRepository.saveAndFlush(course));
+    }
+
+    private Course findEntityForMutation(UUID id, long expectedVersion) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+        OptimisticLockingGuard.verifyVersion("Course", id, expectedVersion, course.getVersion());
+        return course;
     }
 
     private List<Course.EquipmentRequirement> mapItems(List<CourseEquipmentItemDto> dtos) {
@@ -200,6 +197,7 @@ public class CourseService {
 
         return new CourseResponse(
                 c.getId(),
+                c.getVersion(),
                 c.getCode(),
                 c.getTitle(),
                 c.getStatus(),

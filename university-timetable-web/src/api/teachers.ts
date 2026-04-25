@@ -1,4 +1,4 @@
-import {http} from './http';
+import {http, ifMatchHeaders} from './http';
 import type {
     CreateTeacherRequest,
     TeacherResponse,
@@ -25,28 +25,36 @@ export const teachersApi = {
         });
     },
 
-    update(id: UUID, body: UpdateTeacherRequest) {
+    update(id: UUID, body: UpdateTeacherRequest, version: number) {
         return http<TeacherResponse>(`${BASE_PATH}/${id}`, {
             method: 'PUT',
+            headers: ifMatchHeaders(version),
             body: JSON.stringify(body),
         });
     },
 
-    archive(id: UUID) {
+    archive(id: UUID, version: number) {
         return http<TeacherResponse>(`${BASE_PATH}/${id}/archive`, {
             method: 'POST',
+            headers: ifMatchHeaders(version),
         });
     },
 
-    activate(id: UUID) {
+    activate(id: UUID, version: number) {
         return http<TeacherResponse>(`${BASE_PATH}/${id}/activate`, {
             method: 'POST',
+            headers: ifMatchHeaders(version),
         });
     },
 
-    updateWorkingHours(id: UUID, body: UpdateWorkingHoursRequest) {
+    updateWorkingHours(
+        id: UUID,
+        body: UpdateWorkingHoursRequest,
+        version: number
+    ) {
         return http<TeacherResponse>(`${BASE_PATH}/${id}/working-hours`, {
             method: 'PUT',
+            headers: ifMatchHeaders(version),
             body: JSON.stringify(body),
         });
     },

@@ -15,6 +15,7 @@ export interface StudentResponse {
     fullName: string;
     studentId: string;
     status: Status;
+    version: number;
     createdAt: string;
     updatedAt: string;
 }

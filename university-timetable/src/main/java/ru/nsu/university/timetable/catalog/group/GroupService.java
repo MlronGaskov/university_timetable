@@ -8,6 +8,7 @@ import ru.nsu.university.timetable.catalog.group.dto.CreateGroupRequest;
 import ru.nsu.university.timetable.catalog.group.dto.GroupResponse;
 import ru.nsu.university.timetable.catalog.group.dto.UpdateGroupRequest;
 import ru.nsu.university.timetable.user.student.StudentRepository;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.List;
 import java.util.UUID;
@@ -34,7 +35,7 @@ public class GroupService {
                 .status(Status.ACTIVE)
                 .build();
 
-        return map(groupRepository.save(g));
+        return map(groupRepository.saveAndFlush(g));
     }
 
     @Transactional(readOnly = true)
@@ -51,9 +52,8 @@ public class GroupService {
                 .orElseThrow(() -> new IllegalArgumentException("Group not found: " + id));
     }
 
-    public GroupResponse update(UUID id, UpdateGroupRequest req) {
-        Group g = groupRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + id));
+    public GroupResponse update(UUID id, long expectedVersion, UpdateGroupRequest req) {
+        Group g = findEntityForMutation(id, expectedVersion);
 
         if (req.name() != null) {
             g.setName(req.name());
@@ -72,28 +72,23 @@ public class GroupService {
             g.setSize(req.size());
         }
 
-        return map(g);
+        return map(groupRepository.saveAndFlush(g));
     }
 
-    public GroupResponse archive(UUID id) {
-        Group g = groupRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + id));
-
+    public GroupResponse archive(UUID id, long expectedVersion) {
+        Group g = findEntityForMutation(id, expectedVersion);
         g.setStatus(Status.INACTIVE);
-        return map(g);
+        return map(groupRepository.saveAndFlush(g));
     }
 
-    public GroupResponse activate(UUID id) {
-        Group g = groupRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + id));
-
+    public GroupResponse activate(UUID id, long expectedVersion) {
+        Group g = findEntityForMutation(id, expectedVersion);
         g.setStatus(Status.ACTIVE);
-        return map(g);
+        return map(groupRepository.saveAndFlush(g));
     }
 
-    public GroupResponse addStudent(UUID groupId, String studentId) {
-        Group group = groupRepository.findById(groupId)
-                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + groupId));
+    public GroupResponse addStudent(UUID groupId, long expectedVersion, String studentId) {
+        Group group = findEntityForMutation(groupId, expectedVersion);
 
         if (studentId == null || studentId.isBlank()) {
             throw new IllegalArgumentException("studentId must not be blank");
@@ -108,26 +103,31 @@ public class GroupService {
             group.getStudentIds().add(normalized);
         }
 
-        return map(group);
+        return map(groupRepository.saveAndFlush(group));
     }
 
-    public GroupResponse removeStudent(UUID groupId, String studentId) {
-        Group group = groupRepository.findById(groupId)
-                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + groupId));
+    public GroupResponse removeStudent(UUID groupId, long expectedVersion, String studentId) {
+        Group group = findEntityForMutation(groupId, expectedVersion);
 
-        if (studentId == null || studentId.isBlank()) {
-            return map(group);
+        if (studentId != null && !studentId.isBlank()) {
+            String normalized = studentId.trim();
+            group.getStudentIds().remove(normalized);
         }
-        String normalized = studentId.trim();
 
-        group.getStudentIds().remove(normalized);
+        return map(groupRepository.saveAndFlush(group));
+    }
 
-        return map(group);
+    private Group findEntityForMutation(UUID id, long expectedVersion) {
+        Group g = groupRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + id));
+        OptimisticLockingGuard.verifyVersion("Group", id, expectedVersion, g.getVersion());
+        return g;
     }
 
     private GroupResponse map(Group g) {
         return new GroupResponse(
                 g.getId(),
+                g.getVersion(),
                 g.getName(),
                 g.getCode(),
                 g.getSize(),

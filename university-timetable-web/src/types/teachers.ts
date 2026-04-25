@@ -35,6 +35,7 @@ export interface TeacherResponse {
     teacherId: string;
     fullName: string;
     status: Status;
+    version: number;
     preferredWorkingHours: WorkingIntervalDto[];
     createdAt: string;
     updatedAt: string;

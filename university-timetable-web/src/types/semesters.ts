@@ -27,6 +27,7 @@ export interface SemesterResponse {
     policyName: string;
     courseCodes: string[];
     roomCodes: string[];
+    version: number;
     createdAt: string;
     updatedAt: string;
 }

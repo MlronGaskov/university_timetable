@@ -26,6 +26,7 @@ export interface PolicyResponse {
     limitsJson: string;
     travelMatrixJson: string;
     weightsJson: string;
+    version: number;
     createdAt: string;
     updatedAt: string;
 }

@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.nsu.university.timetable.catalog.policy.dto.CreatePolicyRequest;
 import ru.nsu.university.timetable.catalog.policy.dto.PolicyResponse;
 import ru.nsu.university.timetable.catalog.policy.dto.UpdatePolicyRequest;
+import ru.nsu.university.timetable.web.IfMatchVersion;
 
 import java.util.List;
 import java.util.UUID;
@@ -41,13 +42,15 @@ public class PolicyController {
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public PolicyResponse update(@PathVariable UUID id,
+                                 @RequestHeader(name = "If-Match", required = false) String ifMatch,
                                  @Valid @RequestBody UpdatePolicyRequest req) {
-        return service.update(id, req);
+        return service.update(id, IfMatchVersion.parseRequired(ifMatch), req);
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    public void delete(@PathVariable UUID id) {
-        service.delete(id);
+    public void delete(@PathVariable UUID id,
+                       @RequestHeader(name = "If-Match", required = false) String ifMatch) {
+        service.delete(id, IfMatchVersion.parseRequired(ifMatch));
     }
 }

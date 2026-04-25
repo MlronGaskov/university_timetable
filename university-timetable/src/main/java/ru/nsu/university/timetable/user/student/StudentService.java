@@ -7,6 +7,7 @@ import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.user.student.dto.CreateStudentRequest;
 import ru.nsu.university.timetable.user.student.dto.StudentResponse;
 import ru.nsu.university.timetable.user.student.dto.UpdateStudentRequest;
+import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,7 +27,7 @@ public class StudentService {
                 .status(Status.ACTIVE)
                 .build();
 
-        return toDto(repository.save(entity));
+        return toDto(repository.saveAndFlush(entity));
     }
 
     @Transactional(readOnly = true)
@@ -39,12 +40,13 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public StudentResponse findOne(UUID id) {
-        Student s = repository.findById(id).orElseThrow();
+        Student s = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found: " + id));
         return toDto(s);
     }
 
-    public StudentResponse update(UUID id, UpdateStudentRequest req) {
-        Student s = repository.findById(id).orElseThrow();
+    public StudentResponse update(UUID id, long expectedVersion, UpdateStudentRequest req) {
+        Student s = findEntityForMutation(id, expectedVersion);
 
         if (req.fullName() != null) {
             s.setFullName(normalizeName(req.fullName()));
@@ -55,19 +57,26 @@ public class StudentService {
             s.setStudentId(req.studentId().trim());
         }
 
-        return toDto(s);
+        return toDto(repository.saveAndFlush(s));
     }
 
-    public StudentResponse archive(UUID id) {
-        Student s = repository.findById(id).orElseThrow();
+    public StudentResponse archive(UUID id, long expectedVersion) {
+        Student s = findEntityForMutation(id, expectedVersion);
         s.setStatus(Status.INACTIVE);
-        return toDto(s);
+        return toDto(repository.saveAndFlush(s));
     }
 
-    public StudentResponse activate(UUID id) {
-        Student s = repository.findById(id).orElseThrow();
+    public StudentResponse activate(UUID id, long expectedVersion) {
+        Student s = findEntityForMutation(id, expectedVersion);
         s.setStatus(Status.ACTIVE);
-        return toDto(s);
+        return toDto(repository.saveAndFlush(s));
+    }
+
+    private Student findEntityForMutation(UUID id, long expectedVersion) {
+        Student s = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found: " + id));
+        OptimisticLockingGuard.verifyVersion("Student", id, expectedVersion, s.getVersion());
+        return s;
     }
 
     private void ensureStudentIdUnique(String studentId, UUID currentId) {
@@ -98,6 +107,7 @@ public class StudentService {
     private StudentResponse toDto(Student s) {
         return new StudentResponse(
                 s.getId(),
+                s.getVersion(),
                 s.getFullName(),
                 s.getStudentId(),
                 s.getStatus(),
