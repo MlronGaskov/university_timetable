@@ -25,7 +25,28 @@ parse_policy(PolicyIn, PolicyOut) :-
     }.
 
 get_dict_default(Key, Dict, Default, Value) :-
-    ( get_dict(Key, Dict, V) -> Value = V ; Value = Default ).
+    (   get_dict(Key, Dict, V),
+        \+ json_nullish(V)
+    ->  Value = V
+    ;   Value = Default
+    ).
+
+json_nullish(Value) :-
+    var(Value),
+    !.
+json_nullish(null) :-
+    !.
+json_nullish(@(null)) :-
+    !.
+json_nullish(Value) :-
+    (string(Value) ; atom(Value)),
+    !,
+    ensure_string(Value, S),
+    normalize_space(string(Trimmed), S),
+    string_lower(Trimmed, Lower),
+    (Lower = "" ; Lower = "null").
+json_nullish(_) :-
+    fail.
 
 parse_grid(Raw, Grid) :-
     default_grid(Default),
@@ -108,14 +129,22 @@ default_search(_{
 }).
 
 parse_json_to_dict(Raw, DictOut, Default) :-
-    ( is_dict(Raw) -> DictOut = Raw
-    ; is_list(Raw) -> DictOut = Raw
-    ; ensure_string(Raw, S),
-      ( S = "" -> DictOut = Default
-      ; atom_string(A, S),
-        ( catch(atom_json_dict(A, D, []), _, fail)
-        -> DictOut = D
-        ;  DictOut = Default
+    (   json_nullish(Raw)
+    ->  DictOut = Default
+    ;   is_dict(Raw)
+    ->  DictOut = Raw
+    ;   ensure_string(Raw, S),
+        normalize_space(string(Trimmed), S),
+        string_lower(Trimmed, Lower),
+        (   Lower = ""
+        ->  DictOut = Default
+        ;   Lower = "null"
+        ->  DictOut = Default
+        ;   atom_string(A, S),
+            (   catch(atom_json_dict(A, Parsed, []), _, fail),
+                is_dict(Parsed)
+            ->  DictOut = Parsed
+            ;   DictOut = Default
+            )
         )
-      )
     ).

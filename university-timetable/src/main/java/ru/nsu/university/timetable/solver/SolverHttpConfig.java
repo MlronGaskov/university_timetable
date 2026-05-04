@@ -14,7 +14,7 @@ public class SolverHttpConfig {
     public RestTemplate solverRestTemplate(RestTemplateBuilder builder) {
         return builder
                 .connectTimeout(Duration.ofSeconds(2))
-                .readTimeout(Duration.ofSeconds(30))
+                .readTimeout(Duration.ofSeconds(120))
                 .build();
     }
 }

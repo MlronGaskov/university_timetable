@@ -3,14 +3,17 @@
 :- use_module(library(http/http_server)).
 :- use_module(library(http/http_dispatch)).
 :- use_module(library(http/http_json)).
-:- use_module(library(http/json)).
 
 :- use_module('src/solve.pl').
 
 :- http_handler(root(solve), solve_handler, []).
+:- http_handler(root(health), health_handler, []).
 
 start_server(Port) :-
     http_server(http_dispatch, [port(Port)]).
+
+health_handler(_Request) :-
+    reply_json_dict(_{status:"ok"}).
 
 solve_handler(Request) :-
     catch(
@@ -25,7 +28,10 @@ solve_handler(Request) :-
 
 reply_error(error(invalid_request(Message), _)) :-
     !,
-    reply_json_dict(_{error: Message}, [status(400)]).
+    reply_json_dict(_{error:"INVALID_REQUEST", message:Message}, [status(400)]).
+reply_error(error(fixed_slots_conflict(Conflicts), _)) :-
+    !,
+    reply_json_dict(_{error:"FIXED_SLOTS_CONFLICT", conflicts:Conflicts}, [status(400)]).
 reply_error(Error) :-
     message_to_string(Error, Msg),
-    reply_json_dict(_{error: Msg}, [status(500)]).
+    reply_json_dict(_{error:"INTERNAL_ERROR", message:Msg}, [status(500)]).

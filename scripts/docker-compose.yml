@@ -27,10 +27,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://university-timetable-db:5432/university_timetable
       SPRING_DATASOURCE_USERNAME: app
       SPRING_DATASOURCE_PASSWORD: app
-      SOLVER_BASE_URL: http://university-timetable-solver:5000
+      SOLVER_BASE_URL: http://university-timetable-solver-lb:5000
     depends_on:
       university-timetable-db:
         condition: service_healthy
+      university-timetable-solver-lb:
+        condition: service_started
     ports:
       - "8080:8080"
 
@@ -65,11 +67,36 @@ services:
     entrypoint: ["/bin/sh", "/init-root-user.sh"]
     restart: "no"
 
-  university-timetable-solver:
+  university-timetable-solver-1:
     build:
       context: ../university-timetable-solver
       dockerfile: Dockerfile
-    container_name: university-timetable-solver
+    expose:
+      - "5000"
+
+  university-timetable-solver-2:
+    build:
+      context: ../university-timetable-solver
+      dockerfile: Dockerfile
+    expose:
+      - "5000"
+
+  university-timetable-solver-3:
+    build:
+      context: ../university-timetable-solver
+      dockerfile: Dockerfile
+    expose:
+      - "5000"
+
+  university-timetable-solver-lb:
+    image: nginx:1.27-alpine
+    container_name: university-timetable-solver-lb
+    depends_on:
+      - university-timetable-solver-1
+      - university-timetable-solver-2
+      - university-timetable-solver-3
+    volumes:
+      - ./nginx/solver-lb.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "5000:5000"
 
