@@ -9,6 +9,7 @@ import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.catalog.group.dto.UpdateGroupRequest;
 import ru.nsu.university.timetable.user.student.StudentRepository;
 import ru.nsu.university.timetable.web.ResourceConflictException;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,9 @@ class GroupServiceOptimisticLockingTest {
 
     @Mock
     private StudentRepository studentRepository;
+
+    @Mock
+    private ScheduleRegenerationService scheduleRegenerationService;
 
     @InjectMocks
     private GroupService service;
@@ -70,5 +74,6 @@ class GroupServiceOptimisticLockingTest {
         assertEquals("New", response.name());
         assertEquals(12, response.size());
         verify(groupRepository).saveAndFlush(group);
+        verify(scheduleRegenerationService).regenerateAfterGroupChanged("G1");
     }
 }

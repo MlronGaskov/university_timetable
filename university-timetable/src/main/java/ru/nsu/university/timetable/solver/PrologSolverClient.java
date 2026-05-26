@@ -37,8 +37,7 @@ public class PrologSolverClient {
     }
 
     public SolverResponse solve(SolverRequest request) {
-        log.info(request.toString());
-
+        log.info("{} slots to solve", request.slotsToPlace().size());
         Objects.requireNonNull(request, "Solver request must not be null");
 
         String url = baseUrl + "/solve";

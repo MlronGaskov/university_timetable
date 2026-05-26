@@ -8,6 +8,7 @@ import ru.nsu.university.timetable.schedule.semester.dto.CreateSemesterRequest;
 import ru.nsu.university.timetable.schedule.semester.dto.SemesterResponse;
 import ru.nsu.university.timetable.schedule.semester.dto.UpdateSemesterRequest;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class SemesterService {
 
     private final SemesterRepository semesterRepository;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public SemesterResponse create(CreateSemesterRequest req) {
         if (semesterRepository.existsByCodeIgnoreCase(req.code())) {
@@ -86,19 +88,25 @@ public class SemesterService {
             semester.setRoomCodes(normalizeList(req.roomCodes()));
         }
 
-        return map(semesterRepository.saveAndFlush(semester));
+        Semester saved = semesterRepository.saveAndFlush(semester);
+        scheduleRegenerationService.regenerateAfterSemesterChanged(saved.getCode());
+        return map(saved);
     }
 
     public SemesterResponse archive(UUID id, long expectedVersion) {
         Semester semester = findEntityForMutation(id, expectedVersion);
         semester.setStatus(Status.INACTIVE);
-        return map(semesterRepository.saveAndFlush(semester));
+        Semester saved = semesterRepository.saveAndFlush(semester);
+        scheduleRegenerationService.regenerateAfterSemesterChanged(saved.getCode());
+        return map(saved);
     }
 
     public SemesterResponse activate(UUID id, long expectedVersion) {
         Semester semester = findEntityForMutation(id, expectedVersion);
         semester.setStatus(Status.ACTIVE);
-        return map(semesterRepository.saveAndFlush(semester));
+        Semester saved = semesterRepository.saveAndFlush(semester);
+        scheduleRegenerationService.regenerateAfterSemesterChanged(saved.getCode());
+        return map(saved);
     }
 
     private Semester findEntityForMutation(UUID id, long expectedVersion) {

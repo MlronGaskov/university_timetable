@@ -9,6 +9,7 @@ import ru.nsu.university.timetable.catalog.room.dto.RoomItemDto;
 import ru.nsu.university.timetable.catalog.room.dto.RoomResponse;
 import ru.nsu.university.timetable.catalog.room.dto.UpdateRoomRequest;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.util.Comparator;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.UUID;
 @Transactional
 public class RoomService {
     private final RoomRepository roomRepository;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public RoomResponse create(CreateRoomRequest req) {
         if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
@@ -90,19 +92,25 @@ public class RoomService {
             applyItems(room, req.items());
         }
 
-        return map(roomRepository.saveAndFlush(room));
+        Room saved = roomRepository.saveAndFlush(room);
+        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+        return map(saved);
     }
 
     public RoomResponse archive(UUID id, long expectedVersion) {
         Room room = findEntityForMutation(id, expectedVersion);
         room.setStatus(Status.INACTIVE);
-        return map(roomRepository.saveAndFlush(room));
+        Room saved = roomRepository.saveAndFlush(room);
+        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+        return map(saved);
     }
 
     public RoomResponse activate(UUID id, long expectedVersion) {
         Room room = findEntityForMutation(id, expectedVersion);
         room.setStatus(Status.ACTIVE);
-        return map(roomRepository.saveAndFlush(room));
+        Room saved = roomRepository.saveAndFlush(room);
+        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+        return map(saved);
     }
 
     private Room findEntityForMutation(UUID id, long expectedVersion) {

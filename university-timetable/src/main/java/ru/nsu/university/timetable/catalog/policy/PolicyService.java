@@ -8,6 +8,7 @@ import ru.nsu.university.timetable.catalog.policy.dto.CreatePolicyRequest;
 import ru.nsu.university.timetable.catalog.policy.dto.PolicyResponse;
 import ru.nsu.university.timetable.catalog.policy.dto.UpdatePolicyRequest;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.io.IOException;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class PolicyService {
     private final PolicyRepository repository;
     private final ObjectMapper objectMapper;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public PolicyResponse create(CreatePolicyRequest req) {
         if (repository.existsByNameIgnoreCase(req.name())) {
@@ -80,7 +82,9 @@ public class PolicyService {
             policy.setWeightsJson(req.weightsJson());
         }
 
-        return map(repository.saveAndFlush(policy));
+        Policy saved = repository.saveAndFlush(policy);
+        scheduleRegenerationService.regenerateAfterPolicyChanged(saved.getName());
+        return map(saved);
     }
 
     public void delete(UUID id, long expectedVersion) {

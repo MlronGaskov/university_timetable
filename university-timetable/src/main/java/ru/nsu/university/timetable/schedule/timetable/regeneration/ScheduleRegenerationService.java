@@ -1,0 +1,188 @@
+package ru.nsu.university.timetable.schedule.timetable.regeneration;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import ru.nsu.university.timetable.schedule.semester.Semester;
+import ru.nsu.university.timetable.schedule.semester.SemesterRepository;
+import ru.nsu.university.timetable.schedule.timetable.*;
+import ru.nsu.university.timetable.schedule.timetable.solver.ScheduleSolverRequestBuilder;
+import ru.nsu.university.timetable.schedule.timetable.solver.ScheduleSolverResponseMapper;
+import ru.nsu.university.timetable.solver.PrologSolverClient;
+import ru.nsu.university.timetable.solver.dto.SolverRequest;
+import ru.nsu.university.timetable.solver.dto.SolverResponse;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class ScheduleRegenerationService {
+    private static final int MAX_RETRIES = 2;
+
+    private final SemesterRepository semesterRepository;
+    private final ScheduleRepository scheduleRepository;
+    private final ScheduleGenerationLockRepository lockRepository;
+    private final ScheduleRegenerationPlanner planner;
+    private final ScheduleSolverRequestBuilder requestBuilder;
+    private final ScheduleSolverResponseMapper responseMapper;
+    private final PrologSolverClient solverClient;
+    private final PlatformTransactionManager transactionManager;
+
+    public void regenerateAfterCourseChanged(String courseCode) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.courseChanged(courseCode));
+    }
+
+    public void regenerateAfterTeacherWorkingHoursChanged(String teacherId) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.teacherWorkingHoursChanged(teacherId));
+    }
+
+    public void regenerateAfterRoomChanged(String roomCode) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.roomChanged(roomCode));
+    }
+
+    public void regenerateAfterSemesterChanged(String semesterCode) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.semesterChanged(semesterCode));
+    }
+
+    public void regenerateAfterPolicyChanged(String policyName) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.policyChanged(policyName));
+    }
+
+    public void regenerateAfterGroupChanged(String groupCode) {
+        regenerateAffectedSchedules(ScheduleChangeEvent.groupChanged(groupCode));
+    }
+
+    public void regenerateAffectedSchedules(ScheduleChangeEvent event) {
+        for (String semesterCode : affectedSemesterCodes(event)) {
+            regenerateSemesterWithRetry(semesterCode, event);
+        }
+    }
+
+    private void regenerateSemesterWithRetry(String semesterCode, ScheduleChangeEvent event) {
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                new TransactionTemplate(transactionManager).executeWithoutResult(status -> regenerateSemesterOnce(semesterCode, event));
+                return;
+            } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException ex) {
+                lastFailure = ex;
+                log.warn("Schedule regeneration conflict for semesterCode={}, attempt={}", semesterCode, attempt, ex);
+            }
+        }
+        throw lastFailure;
+    }
+
+    private void regenerateSemesterOnce(String semesterCode, ScheduleChangeEvent event) {
+        Semester semester = semesterRepository.findByCodeIgnoreCase(semesterCode)
+                .orElseThrow(() -> new IllegalArgumentException("Semester not found: " + semesterCode));
+        String canonicalSemesterCode = semester.getCode();
+
+        acquireSemesterLock(canonicalSemesterCode);
+
+        Schedule activeSchedule = scheduleRepository
+                .findBySemester_CodeAndStatus(canonicalSemesterCode, ScheduleStatus.ACTIVE)
+                .orElse(null);
+
+        if (activeSchedule == null) {
+            log.info("Skip schedule regeneration for semesterCode={} because active schedule does not exist", canonicalSemesterCode);
+            return;
+        }
+
+        ScheduleRegenerationPlan plan = planner.buildPlan(semester, activeSchedule);
+        if (!plan.hasChanges()) {
+            log.info("Skip schedule regeneration for semesterCode={} because all slots are still valid", canonicalSemesterCode);
+            return;
+        }
+
+        SolverRequest solverRequest = requestBuilder.buildForRegeneration(
+                semester,
+                plan.lockedSlots(),
+                plan.coursesToRegenerate()
+        );
+        SolverResponse solverResponse = solverClient.solve(solverRequest);
+
+        Schedule nextSchedule = Schedule.builder()
+                .semester(semester)
+                .version(activeSchedule.getVersion() + 1)
+                .status(ScheduleStatus.ACTIVE)
+                .baseSchedule(activeSchedule)
+                .generationReason(event.reason())
+                .evaluationScore(solverResponse.evaluationScore())
+                .build();
+
+        plan.lockedSlots().stream()
+                .map(slot -> copySlot(nextSchedule, slot))
+                .forEach(nextSchedule::addSlot);
+
+        responseMapper.toEntitySlots(nextSchedule, solverResponse.placedSlotsOrEmpty())
+                .forEach(nextSchedule::addSlot);
+
+        activeSchedule.setStatus(ScheduleStatus.SUPERSEDED);
+        scheduleRepository.saveAndFlush(activeSchedule);
+        scheduleRepository.saveAndFlush(nextSchedule);
+
+        log.info(
+                "Regenerated schedule for semesterCode={}: oldVersion={}, newVersion={}, regeneratedCourses={}",
+                canonicalSemesterCode,
+                activeSchedule.getVersion(),
+                nextSchedule.getVersion(),
+                plan.coursesToRegenerate().stream().map(c -> c.getCode()).toList()
+        );
+    }
+
+    private void acquireSemesterLock(String semesterCode) {
+        if (!lockRepository.existsById(semesterCode)) {
+            lockRepository.saveAndFlush(new ScheduleGenerationLock(semesterCode));
+        }
+
+        lockRepository.findForUpdate(semesterCode)
+                .orElseThrow(() -> new IllegalStateException("Could not acquire schedule generation lock: " + semesterCode));
+    }
+
+    private ScheduleSlot copySlot(Schedule targetSchedule, ScheduleSlot source) {
+        return ScheduleSlot.builder()
+                .schedule(targetSchedule)
+                .courseCode(source.getCourseCode())
+                .roomCode(source.getRoomCode())
+                .dayOfWeek(source.getDayOfWeek())
+                .startTime(source.getStartTime())
+                .endTime(source.getEndTime())
+                .validFrom(source.getValidFrom())
+                .validUntil(source.getValidUntil())
+                .weekPattern(source.getWeekPattern())
+                .build();
+    }
+
+    private List<String> affectedSemesterCodes(ScheduleChangeEvent event) {
+        Set<String> result = new LinkedHashSet<>();
+
+        if (event.semesterCode() != null) {
+            semesterRepository.findByCodeIgnoreCase(event.semesterCode()).ifPresent(s -> result.add(s.getCode()));
+        }
+        if (event.courseCode() != null) {
+            semesterRepository.findByCourseCodeIgnoreCase(event.courseCode()).forEach(s -> result.add(s.getCode()));
+        }
+        if (event.teacherId() != null) {
+            semesterRepository.findByTeacherIdIgnoreCase(event.teacherId()).forEach(s -> result.add(s.getCode()));
+        }
+        if (event.roomCode() != null) {
+            semesterRepository.findByRoomCodeIgnoreCase(event.roomCode()).forEach(s -> result.add(s.getCode()));
+        }
+        if (event.policyName() != null) {
+            semesterRepository.findByPolicyNameIgnoreCase(event.policyName()).forEach(s -> result.add(s.getCode()));
+        }
+        if (event.groupCode() != null) {
+            semesterRepository.findByGroupCodeIgnoreCase(event.groupCode()).forEach(s -> result.add(s.getCode()));
+        }
+
+        return new ArrayList<>(result);
+    }
+}

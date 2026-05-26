@@ -14,6 +14,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode
 @Embeddable
 public class TeacherWorkingHours {
     @Enumerated(EnumType.STRING)

@@ -43,7 +43,10 @@ public class WeeklySlotToPlaceGenerator {
     }
 
     int requiredWeeklyPairCount(int plannedHours) {
-        return Math.max(1, (plannedHours + 1) / 2);
+        if (plannedHours <= 0) {
+            return 0;
+        }
+        return (plannedHours + 1) / 2;
     }
 
     private String buildRequestId(String courseCode, int occurrence) {

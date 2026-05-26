@@ -46,6 +46,19 @@ public class Schedule {
     @Column(name = "evaluation_score")
     private Double evaluationScore;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    @Builder.Default
+    private ScheduleStatus status = ScheduleStatus.ACTIVE;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "base_schedule_id")
+    private Schedule baseSchedule;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "generation_reason", length = 64)
+    private ScheduleGenerationReason generationReason;
+
     @OneToMany(
             mappedBy = "schedule",
             cascade = CascadeType.ALL,

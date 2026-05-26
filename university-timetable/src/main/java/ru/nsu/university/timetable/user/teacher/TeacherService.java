@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.user.teacher.dto.*;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.time.DayOfWeek;
 import java.util.*;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
 @Transactional
 public class TeacherService {
     private final TeacherRepository repo;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public TeacherResponse create(CreateTeacherRequest req) {
         if (repo.existsByFullNameIgnoreCase(req.fullName())) {
@@ -70,25 +72,33 @@ public class TeacherService {
             t.setPreferredWorkingHours(validated);
         }
 
-        return map(repo.saveAndFlush(t));
+        Teacher saved = repo.saveAndFlush(t);
+        scheduleRegenerationService.regenerateAfterTeacherWorkingHoursChanged(saved.getTeacherId());
+        return map(saved);
     }
 
     public TeacherResponse archive(UUID id, long expectedVersion) {
         Teacher t = findEntityForMutation(id, expectedVersion);
         t.setStatus(Status.INACTIVE);
-        return map(repo.saveAndFlush(t));
+        Teacher saved = repo.saveAndFlush(t);
+        scheduleRegenerationService.regenerateAfterTeacherWorkingHoursChanged(saved.getTeacherId());
+        return map(saved);
     }
 
     public TeacherResponse activate(UUID id, long expectedVersion) {
         Teacher t = findEntityForMutation(id, expectedVersion);
         t.setStatus(Status.ACTIVE);
-        return map(repo.saveAndFlush(t));
+        Teacher saved = repo.saveAndFlush(t);
+        scheduleRegenerationService.regenerateAfterTeacherWorkingHoursChanged(saved.getTeacherId());
+        return map(saved);
     }
 
     public TeacherResponse updateWorkingHours(UUID teacherId, long expectedVersion, UpdateWorkingHoursRequest req) {
         Teacher t = findEntityForMutation(teacherId, expectedVersion);
         t.setPreferredWorkingHours(toEntityWorkingHours(req.preferredWorkingHours()));
-        return map(repo.saveAndFlush(t));
+        Teacher saved = repo.saveAndFlush(t);
+        scheduleRegenerationService.regenerateAfterTeacherWorkingHoursChanged(saved.getTeacherId());
+        return map(saved);
     }
 
     private Teacher findEntityForMutation(UUID id, long expectedVersion) {

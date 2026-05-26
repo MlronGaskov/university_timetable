@@ -53,7 +53,15 @@ public class ScheduleService {
                         return new IllegalArgumentException("Semester not found: " + semesterCode);
                     });
 
-            int nextVersion = scheduleRepository.findTopBySemester_CodeOrderByVersionDesc(semesterCode)
+            String canonicalSemesterCode = semester.getCode();
+
+            scheduleRepository.findBySemester_CodeAndStatus(canonicalSemesterCode, ScheduleStatus.ACTIVE)
+                    .ifPresent(active -> {
+                        active.setStatus(ScheduleStatus.SUPERSEDED);
+                        scheduleRepository.saveAndFlush(active);
+                    });
+
+            int nextVersion = scheduleRepository.findTopBySemester_CodeOrderByVersionDesc(canonicalSemesterCode)
                     .map(s -> s.getVersion() + 1)
                     .orElse(1);
 
@@ -63,6 +71,8 @@ public class ScheduleService {
             Schedule schedule = Schedule.builder()
                     .semester(semester)
                     .version(nextVersion)
+                    .status(ScheduleStatus.ACTIVE)
+                    .generationReason(ScheduleGenerationReason.FULL_GENERATION)
                     .evaluationScore(solverResponse.evaluationScore())
                     .build();
 

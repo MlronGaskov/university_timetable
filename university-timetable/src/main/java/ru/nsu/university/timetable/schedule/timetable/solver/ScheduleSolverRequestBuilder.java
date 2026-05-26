@@ -9,6 +9,7 @@ import ru.nsu.university.timetable.catalog.room.RoomRepository;
 import ru.nsu.university.timetable.schedule.course.Course;
 import ru.nsu.university.timetable.schedule.course.CourseRepository;
 import ru.nsu.university.timetable.schedule.semester.Semester;
+import ru.nsu.university.timetable.schedule.timetable.ScheduleSlot;
 import ru.nsu.university.timetable.solver.dto.SolverRequest;
 import ru.nsu.university.timetable.user.teacher.Teacher;
 import ru.nsu.university.timetable.user.teacher.TeacherRepository;
@@ -16,6 +17,8 @@ import ru.nsu.university.timetable.user.teacher.TeacherWorkingHours;
 
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -40,13 +43,60 @@ public class ScheduleSolverRequestBuilder {
         List<SolverRequest.RoomDto> rooms = loadSemesterRooms(semester);
         List<SolverRequest.TeacherDto> teachers = loadTeachersForCourses(courses);
 
-        SolverRequest.SemesterDto semesterDto = new SolverRequest.SemesterDto(
+        return new SolverRequest(
+                toSemesterDto(semester),
+                rooms,
+                teachers,
+                toPolicyDto(policy),
+                List.of(),
+                slotsToPlace
+        );
+    }
+
+    public SolverRequest buildForRegeneration(
+            Semester semester,
+            List<ScheduleSlot> lockedSlots,
+            List<Course> coursesToRegenerate
+    ) {
+        Objects.requireNonNull(semester, "semester must not be null");
+
+        Policy policy = policyRepository.findByNameIgnoreCase(semester.getPolicyName())
+                .orElseThrow(() -> new IllegalArgumentException("Policy not found: " + semester.getPolicyName()));
+
+        List<Course> allSemesterCourses = loadSemesterCourses(semester);
+        Map<String, Course> coursesByCode = allSemesterCourses.stream()
+                .collect(Collectors.toMap(
+                        course -> normalize(course.getCode()),
+                        Function.identity(),
+                        (first, second) -> first
+                ));
+
+        List<SolverRequest.FixedSlotDto> fixedSlots = safeList(lockedSlots).stream()
+                .map(slot -> toFixedSlotDto(slot, coursesByCode))
+                .toList();
+
+        List<SolverRequest.SlotToPlaceDto> slotsToPlace = weeklySlotToPlaceGenerator.generate(safeList(coursesToRegenerate));
+
+        return new SolverRequest(
+                toSemesterDto(semester),
+                loadSemesterRooms(semester),
+                loadTeachersForCourses(allSemesterCourses),
+                toPolicyDto(policy),
+                fixedSlots,
+                slotsToPlace
+        );
+    }
+
+    private SolverRequest.SemesterDto toSemesterDto(Semester semester) {
+        return new SolverRequest.SemesterDto(
                 semester.getCode(),
                 semester.getStartAt(),
                 semester.getEndAt()
         );
+    }
 
-        SolverRequest.PolicyDto policyDto = new SolverRequest.PolicyDto(
+    private SolverRequest.PolicyDto toPolicyDto(Policy policy) {
+        return new SolverRequest.PolicyDto(
                 policy.getId().toString(),
                 policy.getGridJson(),
                 policy.getBreaksJson(),
@@ -54,14 +104,27 @@ public class ScheduleSolverRequestBuilder {
                 policy.getTravelMatrixJson(),
                 policy.getWeightsJson()
         );
+    }
 
-        return new SolverRequest(
-                semesterDto,
-                rooms,
-                teachers,
-                policyDto,
-                List.of(),
-                slotsToPlace
+    private SolverRequest.FixedSlotDto toFixedSlotDto(ScheduleSlot slot, Map<String, Course> coursesByCode) {
+        Course course = coursesByCode.get(normalize(slot.getCourseCode()));
+        if (course == null) {
+            throw new IllegalArgumentException("Course for fixed slot not found: " + slot.getCourseCode());
+        }
+
+        String slotId = slot.getId() == null
+                ? slot.getCourseCode() + "@" + slot.getDayOfWeek() + "@" + slot.getStartTime()
+                : slot.getId().toString();
+
+        return new SolverRequest.FixedSlotDto(
+                slotId,
+                course.getCode(),
+                course.getTeacherId(),
+                safeList(course.getGroupCodes()),
+                slot.getRoomCode(),
+                slot.getDayOfWeek().name(),
+                slot.getStartTime().format(TIME_FORMATTER),
+                slot.getEndTime().format(TIME_FORMATTER)
         );
     }
 
@@ -123,6 +186,10 @@ public class ScheduleSolverRequestBuilder {
             ));
         }
         return result;
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private static <T> Collection<T> safeCollection(Collection<T> collection) {

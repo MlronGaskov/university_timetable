@@ -9,6 +9,7 @@ import ru.nsu.university.timetable.catalog.group.dto.GroupResponse;
 import ru.nsu.university.timetable.catalog.group.dto.UpdateGroupRequest;
 import ru.nsu.university.timetable.user.student.StudentRepository;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +21,7 @@ public class GroupService {
 
     private final GroupRepository groupRepository;
     private final StudentRepository studentRepository;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public GroupResponse create(CreateGroupRequest req) {
         if (groupRepository.existsByCodeIgnoreCase(req.code())) {
@@ -72,19 +74,25 @@ public class GroupService {
             g.setSize(req.size());
         }
 
-        return map(groupRepository.saveAndFlush(g));
+        Group saved = groupRepository.saveAndFlush(g);
+        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+        return map(saved);
     }
 
     public GroupResponse archive(UUID id, long expectedVersion) {
         Group g = findEntityForMutation(id, expectedVersion);
         g.setStatus(Status.INACTIVE);
-        return map(groupRepository.saveAndFlush(g));
+        Group saved = groupRepository.saveAndFlush(g);
+        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+        return map(saved);
     }
 
     public GroupResponse activate(UUID id, long expectedVersion) {
         Group g = findEntityForMutation(id, expectedVersion);
         g.setStatus(Status.ACTIVE);
-        return map(groupRepository.saveAndFlush(g));
+        Group saved = groupRepository.saveAndFlush(g);
+        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+        return map(saved);
     }
 
     public GroupResponse addStudent(UUID groupId, long expectedVersion, String studentId) {
@@ -103,7 +111,9 @@ public class GroupService {
             group.getStudentIds().add(normalized);
         }
 
-        return map(groupRepository.saveAndFlush(group));
+        Group saved = groupRepository.saveAndFlush(group);
+        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+        return map(saved);
     }
 
     public GroupResponse removeStudent(UUID groupId, long expectedVersion, String studentId) {
@@ -114,7 +124,9 @@ public class GroupService {
             group.getStudentIds().remove(normalized);
         }
 
-        return map(groupRepository.saveAndFlush(group));
+        Group saved = groupRepository.saveAndFlush(group);
+        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+        return map(saved);
     }
 
     private Group findEntityForMutation(UUID id, long expectedVersion) {

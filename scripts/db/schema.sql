@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS group_students
     CONSTRAINT fk_group_students_group
         FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE,
     CONSTRAINT fk_group_students_student
-        FOREIGN KEY (student_id) REFERENCES students (student_id)
+        FOREIGN KEY (student_id) REFERENCES students (student_id) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS rooms
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS courses
     CONSTRAINT uk_courses_code UNIQUE (code),
 
     CONSTRAINT fk_courses_teacher
-        FOREIGN KEY (teacher_id) REFERENCES teachers (teacher_id)
+        FOREIGN KEY (teacher_id) REFERENCES teachers (teacher_id) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS course_groups
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS course_groups
     CONSTRAINT fk_course_groups_course
         FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE,
     CONSTRAINT fk_course_groups_group
-        FOREIGN KEY (group_code) REFERENCES groups (code)
+        FOREIGN KEY (group_code) REFERENCES groups (code) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS course_items
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS semesters
 
     CONSTRAINT uk_semesters_code UNIQUE (code),
     CONSTRAINT fk_semesters_policy_name
-        FOREIGN KEY (policy_name) REFERENCES policies (name)
+        FOREIGN KEY (policy_name) REFERENCES policies (name) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS semester_rooms
@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS semester_rooms
     CONSTRAINT fk_semester_rooms_semester
         FOREIGN KEY (semester_id) REFERENCES semesters (id) ON DELETE CASCADE,
     CONSTRAINT fk_semester_rooms_room
-        FOREIGN KEY (room_code) REFERENCES rooms (code)
+        FOREIGN KEY (room_code) REFERENCES rooms (code) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS semester_courses
@@ -203,23 +203,36 @@ CREATE TABLE IF NOT EXISTS semester_courses
     CONSTRAINT fk_semester_courses_semester
         FOREIGN KEY (semester_id) REFERENCES semesters (id) ON DELETE CASCADE,
     CONSTRAINT fk_semester_courses_course
-        FOREIGN KEY (course_code) REFERENCES courses (code)
+        FOREIGN KEY (course_code) REFERENCES courses (code) ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS schedules
 (
-    id               UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-    semester_code    VARCHAR(64) NOT NULL,
-    version          INTEGER     NOT NULL,
-    evaluation_score DOUBLE PRECISION,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
+    semester_code     VARCHAR(64) NOT NULL,
+    version           INTEGER     NOT NULL,
+    evaluation_score  DOUBLE PRECISION,
+    status            VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    base_schedule_id  UUID,
+    generation_reason VARCHAR(64),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     CONSTRAINT fk_schedules_semester
-        FOREIGN KEY (semester_code) REFERENCES semesters (code) ON DELETE CASCADE,
+        FOREIGN KEY (semester_code) REFERENCES semesters (code)
+            ON UPDATE CASCADE
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_schedules_base_schedule
+        FOREIGN KEY (base_schedule_id) REFERENCES schedules (id),
+
     CONSTRAINT uk_schedules_semester_version
         UNIQUE (semester_code, version)
 );
+
+CREATE UNIQUE INDEX uk_one_active_schedule_per_semester
+    ON schedules (semester_code)
+    WHERE status = 'ACTIVE';
 
 CREATE TABLE IF NOT EXISTS schedule_slots
 (
@@ -239,8 +252,28 @@ CREATE TABLE IF NOT EXISTS schedule_slots
     CONSTRAINT fk_schedule_slots_schedule
         FOREIGN KEY (schedule_id) REFERENCES schedules (id) ON DELETE CASCADE,
     CONSTRAINT fk_schedule_slots_course
-        FOREIGN KEY (course_code) REFERENCES courses (code),
+        FOREIGN KEY (course_code) REFERENCES courses (code) ON UPDATE CASCADE,
     CONSTRAINT fk_schedule_slots_room
-        FOREIGN KEY (room_code) REFERENCES rooms (code)
+        FOREIGN KEY (room_code) REFERENCES rooms (code) ON UPDATE CASCADE
 );
 
+CREATE TABLE schedule_generation_locks
+(
+    semester_code VARCHAR(64) PRIMARY KEY,
+    version       BIGINT      NOT NULL DEFAULT 0,
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT fk_schedule_generation_locks_semester
+        FOREIGN KEY (semester_code) REFERENCES semesters (code)
+            ON UPDATE CASCADE
+            ON DELETE CASCADE
+);
+
+CREATE INDEX idx_courses_teacher_id ON courses (teacher_id);
+CREATE INDEX idx_course_groups_group_code ON course_groups (group_code);
+CREATE INDEX idx_semester_courses_course_code ON semester_courses (course_code);
+CREATE INDEX idx_semester_rooms_room_code ON semester_rooms (room_code);
+CREATE INDEX idx_schedules_semester_code ON schedules (semester_code);
+CREATE INDEX idx_schedule_slots_schedule_id ON schedule_slots (schedule_id);
+CREATE INDEX idx_schedule_slots_course_code ON schedule_slots (course_code);
+CREATE INDEX idx_schedule_slots_room_code ON schedule_slots (room_code);

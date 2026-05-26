@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface ScheduleRepository extends JpaRepository<Schedule, UUID> {
     List<Schedule> findBySemester_CodeOrderByVersionDesc(String semesterCode);
     Optional<Schedule> findTopBySemester_CodeOrderByVersionDesc(String semesterCode);
+    Optional<Schedule> findBySemester_CodeAndStatus(String semesterCode, ScheduleStatus status);
 }

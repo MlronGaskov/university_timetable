@@ -11,6 +11,7 @@ import ru.nsu.university.timetable.schedule.course.dto.CourseResponse;
 import ru.nsu.university.timetable.schedule.course.dto.CreateCourseRequest;
 import ru.nsu.university.timetable.schedule.course.dto.UpdateCourseRequest;
 import ru.nsu.university.timetable.user.teacher.TeacherRepository;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public class CourseService {
     private final CourseRepository courseRepository;
     private final GroupRepository groupRepository;
     private final TeacherRepository teacherRepository;
+    private final ScheduleRegenerationService scheduleRegenerationService;
 
     public CourseResponse create(CreateCourseRequest req) {
         if (courseRepository.existsByCodeIgnoreCase(req.code())) {
@@ -56,7 +58,9 @@ public class CourseService {
 
         course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
 
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     @Transactional(readOnly = true)
@@ -115,19 +119,25 @@ public class CourseService {
             course.setEquipmentRequirements(mapItems(req.equipmentRequirements()));
         }
 
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     public CourseResponse archive(UUID id, long expectedVersion) {
         Course course = findEntityForMutation(id, expectedVersion);
         course.setStatus(Status.INACTIVE);
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     public CourseResponse activate(UUID id, long expectedVersion) {
         Course course = findEntityForMutation(id, expectedVersion);
         course.setStatus(Status.ACTIVE);
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     public CourseResponse addGroup(UUID courseId, long expectedVersion, String groupCode) {
@@ -147,7 +157,9 @@ public class CourseService {
             course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     public CourseResponse removeGroup(UUID courseId, long expectedVersion, String groupCode) {
@@ -159,7 +171,9 @@ public class CourseService {
             course.setRequiredRoomCapacity(calculateRequiredRoomCapacity(course));
         }
 
-        return map(courseRepository.saveAndFlush(course));
+        Course saved = courseRepository.saveAndFlush(course);
+        scheduleRegenerationService.regenerateAfterCourseChanged(saved.getCode());
+        return map(saved);
     }
 
     private Course findEntityForMutation(UUID id, long expectedVersion) {
