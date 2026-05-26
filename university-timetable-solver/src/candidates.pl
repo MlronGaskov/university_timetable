@@ -17,14 +17,14 @@ request_to_task(Req, task(RequestId, CourseCode, TeacherId, Groups, ReqCap, ReqI
     required_any(Req, [requestId, id], RequestId0, "slot request id"),
     required_any(Req, [courseCode, courseId], CourseCode0, "courseCode"),
     required_any(Req, [teacherId], TeacherId0, "teacherId"),
-    dict_get_any_default(Req, [groupIds, groups], [], Groups0),
+    required_any(Req, [groupIds, groups], Groups0, "groupIds"),
     dict_get_any_default(Req, [requiredRoomCapacity], 0, ReqCap),
     dict_get_any_default(Req, [equipmentRequirements, requiredItems], [], ReqItems0),
 
     ensure_string(RequestId0, RequestId),
     ensure_string(CourseCode0, CourseCode),
     ensure_string(TeacherId0, TeacherId),
-    normalize_string_list(Groups0, Groups),
+    normalize_nonempty_string_list(Groups0, Groups, "groupIds"),
     ( is_list(ReqItems0) -> ReqItems = ReqItems0 ; ReqItems = [] ).
 
 required_any(Dict, Keys, Value, HumanName) :-
@@ -38,6 +38,24 @@ normalize_string_list([], []).
 normalize_string_list([X|Xs], [S|Ss]) :-
     ensure_string(X, S),
     normalize_string_list(Xs, Ss).
+
+normalize_nonempty_string_list(Value, Strings, HumanName) :-
+    (   is_list(Value)
+    ->  normalize_string_list(Value, Strings0),
+        exclude(blank_string, Strings0, Strings1),
+        sort(Strings1, Strings),
+        (   Strings = []
+        ->  format(string(Msg), "Field in slotsToPlace item must be a non-empty list: ~s", [HumanName]),
+            throw(error(invalid_request(Msg), _))
+        ;   true
+        )
+    ;   format(string(Msg), "Field in slotsToPlace item must be a list: ~s", [HumanName]),
+        throw(error(invalid_request(Msg), _))
+    ).
+
+blank_string(S) :-
+    normalize_space(string(T), S),
+    T = "".
 
 build_all_candidates(Tasks, Rooms0, Teachers0, SlotTemplates0, Policy, TasksWithCands) :-
     preprocess_rooms(Rooms0, Rooms),

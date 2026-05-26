@@ -32,6 +32,9 @@ reply_error(error(invalid_request(Message), _)) :-
 reply_error(error(fixed_slots_conflict(Conflicts), _)) :-
     !,
     reply_json_dict(_{error:"FIXED_SLOTS_CONFLICT", conflicts:Conflicts}, [status(400)]).
+reply_error(error(generated_slots_conflict(Conflicts), _)) :-
+    !,
+    reply_json_dict(_{error:"GENERATED_SLOTS_CONFLICT", conflicts:Conflicts}, [status(500)]).
 reply_error(Error) :-
     message_to_string(Error, Msg),
     reply_json_dict(_{error:"INTERNAL_ERROR", message:Msg}, [status(500)]).

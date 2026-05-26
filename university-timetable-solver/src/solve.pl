@@ -42,6 +42,8 @@ solve_request(Body, Response) :-
                 NewAssignments, Unplaced, HardPenalty, _BestTotal),
 
     append(FixedAssignments, NewAssignments, AllAssignments),
+    hard_conflicts(AllAssignments, GeneratedConflicts),
+    throw_if_generated_conflicts(GeneratedConflicts),
     soft_penalty(AllAssignments, Policy, SoftPenalty),
     TotalPenalty is HardPenalty + SoftPenalty,
     score_from_penalty(TotalPenalty, Score),
@@ -89,7 +91,7 @@ fixed_slot_to_assignment(S, SlotTemplates, N, A) :-
     required_any_fixed(S, [dayOfWeek, day], Day0, "dayOfWeek"),
     required_any_fixed(S, [startTime], Start0, "startTime"),
     required_any_fixed(S, [endTime], End0, "endTime"),
-    dict_get_any_default(S, [groupIds, groups], [], Groups0),
+    required_any_fixed(S, [groupIds, groups], Groups0, "groupIds"),
 
     ensure_string(CourseCode0, CourseCode),
     ensure_string(TeacherId0, TeacherId),
@@ -97,7 +99,7 @@ fixed_slot_to_assignment(S, SlotTemplates, N, A) :-
     ensure_string(Day0, Day),
     ensure_string(Start0, Start),
     ensure_string(End0, End),
-    normalize_string_list(Groups0, Groups),
+    normalize_nonempty_fixed_groups(Groups0, Groups),
 
     (   slot_index_for_time(SlotTemplates, Day, Start, End, SlotIdx, _)
     ->  true
@@ -137,6 +139,22 @@ normalize_string_list([], []).
 normalize_string_list([X|Xs], [S|Ss]) :-
     ensure_string(X, S),
     normalize_string_list(Xs, Ss).
+
+normalize_nonempty_fixed_groups(Value, Groups) :-
+    (   is_list(Value)
+    ->  normalize_string_list(Value, Groups0),
+        exclude(blank_string, Groups0, Groups1),
+        sort(Groups1, Groups),
+        (   Groups = []
+        ->  throw(error(invalid_request("Field in fixedSlots item must be a non-empty list: groupIds"), _))
+        ;   true
+        )
+    ;   throw(error(invalid_request("Field in fixedSlots item must be a list: groupIds"), _))
+    ).
+
+blank_string(S) :-
+    normalize_space(string(T), S),
+    T = "".
 
 validate_fixed_refs(FixedAssignments, Rooms, Teachers) :-
     collect_room_codes(Rooms, RoomCodes),
@@ -187,6 +205,10 @@ violation_message(V, Msg) :-
 throw_if_fixed_conflicts([]) :- !.
 throw_if_fixed_conflicts(Conflicts) :-
     throw(error(fixed_slots_conflict(Conflicts), _)).
+
+throw_if_generated_conflicts([]) :- !.
+throw_if_generated_conflicts(Conflicts) :-
+    throw(error(generated_slots_conflict(Conflicts), _)).
 
 fixed_warnings(FixedAssignments, Teachers, SlotTemplates, Warnings) :-
     findall(W,

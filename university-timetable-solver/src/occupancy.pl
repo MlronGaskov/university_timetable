@@ -4,6 +4,7 @@
     add_assignment_occ/3,
     candidate_ok/3,
     fixed_conflicts/2,
+    hard_conflicts/2,
     put_candidate_occ/4,
     get_mask/3
 ]).
@@ -49,6 +50,9 @@ candidate_ok(cand(RoomCode, Day, _Start, _End, SlotIdx),
     groups_free(Groups, Day, Bit, GroupOcc).
 
 fixed_conflicts(Assignments, Conflicts) :-
+    hard_conflicts(Assignments, Conflicts).
+
+hard_conflicts(Assignments, Conflicts) :-
     findall(C,
         (
             append(_, [A|Rest], Assignments),
@@ -58,45 +62,61 @@ fixed_conflicts(Assignments, Conflicts) :-
         Conflicts).
 
 assignment_conflict(A, B, Conflict) :-
-    same_day_slot(A, B),
+    same_day_overlap(A, B),
     A.roomCode = B.roomCode,
+    assignment_public_id(A, AId),
+    assignment_public_id(B, BId),
     Conflict = _{
         type:"ROOM_CONFLICT",
-        slotIds:[A.slotId, B.slotId],
+        slotIds:[AId, BId],
         roomCode:A.roomCode,
         dayOfWeek:A.dayOfWeek,
         startTime:A.startTime,
         endTime:A.endTime
     }.
 assignment_conflict(A, B, Conflict) :-
-    same_day_slot(A, B),
+    same_day_overlap(A, B),
     A.teacherId = B.teacherId,
+    assignment_public_id(A, AId),
+    assignment_public_id(B, BId),
     Conflict = _{
         type:"TEACHER_CONFLICT",
-        slotIds:[A.slotId, B.slotId],
+        slotIds:[AId, BId],
         teacherId:A.teacherId,
         dayOfWeek:A.dayOfWeek,
         startTime:A.startTime,
         endTime:A.endTime
     }.
 assignment_conflict(A, B, Conflict) :-
-    same_day_slot(A, B),
+    same_day_overlap(A, B),
     member(GA, A.groups),
     member(GB, B.groups),
     ensure_string(GA, G),
     ensure_string(GB, G),
+    assignment_public_id(A, AId),
+    assignment_public_id(B, BId),
     Conflict = _{
         type:"GROUP_CONFLICT",
-        slotIds:[A.slotId, B.slotId],
+        slotIds:[AId, BId],
         groupId:G,
         dayOfWeek:A.dayOfWeek,
         startTime:A.startTime,
         endTime:A.endTime
     }.
 
-same_day_slot(A, B) :-
+same_day_overlap(A, B) :-
     A.dayOfWeek = B.dayOfWeek,
-    A.slotIndex =:= B.slotIndex.
+    times_overlap(A.startTime, A.endTime, B.startTime, B.endTime).
+
+assignment_public_id(A, Id) :-
+    (   get_dict(slotId, A, V)
+    ->  ensure_string(V, Id)
+    ;   get_dict(requestId, A, V)
+    ->  ensure_string(V, Id)
+    ;   get_dict(courseCode, A, V)
+    ->  ensure_string(V, Id)
+    ;   Id = "unknown"
+    ).
 
 put_groups([], _Day, _Bit, G0, G0).
 put_groups([G|Gs], Day, Bit, G0, G2) :-
