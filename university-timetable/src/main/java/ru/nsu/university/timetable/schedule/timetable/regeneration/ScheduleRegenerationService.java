@@ -33,6 +33,7 @@ public class ScheduleRegenerationService {
     private final ScheduleRegenerationPlanner planner;
     private final ScheduleSolverRequestBuilder requestBuilder;
     private final ScheduleSolverResponseMapper responseMapper;
+    private final ScheduleChangeNotificationService notificationService;
     private final PrologSolverClient solverClient;
     private final PlatformTransactionManager transactionManager;
 
@@ -128,6 +129,7 @@ public class ScheduleRegenerationService {
         activeSchedule.setStatus(ScheduleStatus.SUPERSEDED);
         scheduleRepository.saveAndFlush(activeSchedule);
         scheduleRepository.saveAndFlush(nextSchedule);
+        notificationService.notifyUsersAboutChanges(semester, activeSchedule, nextSchedule, event);
 
         log.info(
                 "Regenerated schedule for semesterCode={}: oldVersion={}, newVersion={}, regeneratedCourses={}",
