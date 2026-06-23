@@ -7,11 +7,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.nsu.university.timetable.catalog.common.Status;
 import ru.nsu.university.timetable.catalog.group.dto.UpdateGroupRequest;
+import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
 import ru.nsu.university.timetable.user.student.StudentRepository;
 import ru.nsu.university.timetable.web.ResourceConflictException;
-import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
+import ru.nsu.university.timetable.web.RetriableTransactionExecutor;
 
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -27,6 +29,9 @@ class GroupServiceOptimisticLockingTest {
 
     @Mock
     private ScheduleRegenerationService scheduleRegenerationService;
+
+    @Mock
+    private RetriableTransactionExecutor transactionExecutor;
 
     @InjectMocks
     private GroupService service;
@@ -44,6 +49,8 @@ class GroupServiceOptimisticLockingTest {
         group.setVersion(2L);
 
         when(groupRepository.findById(id)).thenReturn(Optional.of(group));
+        when(transactionExecutor.execute(eq("group.update"), any(Supplier.class)))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
 
         assertThrows(
                 ResourceConflictException.class,
@@ -68,6 +75,8 @@ class GroupServiceOptimisticLockingTest {
 
         when(groupRepository.findById(id)).thenReturn(Optional.of(group));
         when(groupRepository.saveAndFlush(group)).thenAnswer(invocation -> invocation.getArgument(0));
+        when(transactionExecutor.execute(eq("group.update"), any(Supplier.class)))
+                .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
 
         var response = service.update(id, 2L, new UpdateGroupRequest("New", null, 12));
 

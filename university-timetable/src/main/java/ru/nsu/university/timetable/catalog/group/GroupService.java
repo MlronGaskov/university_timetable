@@ -10,34 +10,37 @@ import ru.nsu.university.timetable.catalog.group.dto.UpdateGroupRequest;
 import ru.nsu.university.timetable.user.student.StudentRepository;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
+import ru.nsu.university.timetable.web.RetriableTransactionExecutor;
 
 import java.util.List;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class GroupService {
 
     private final GroupRepository groupRepository;
     private final StudentRepository studentRepository;
     private final ScheduleRegenerationService scheduleRegenerationService;
+    private final RetriableTransactionExecutor transactionExecutor;
 
     public GroupResponse create(CreateGroupRequest req) {
-        if (groupRepository.existsByCodeIgnoreCase(req.code())) {
-            throw new IllegalArgumentException(
-                    "Group with code '%s' already exists".formatted(req.code())
-            );
-        }
+        return transactionExecutor.execute("group.create", () -> {
+            if (groupRepository.existsByCodeIgnoreCase(req.code())) {
+                throw new IllegalArgumentException(
+                        "Group with code '%s' already exists".formatted(req.code())
+                );
+            }
 
-        Group g = Group.builder()
-                .name(req.name())
-                .code(req.code())
-                .size(req.size())
-                .status(Status.ACTIVE)
-                .build();
+            Group g = Group.builder()
+                    .name(req.name())
+                    .code(req.code())
+                    .size(req.size())
+                    .status(Status.ACTIVE)
+                    .build();
 
-        return map(groupRepository.saveAndFlush(g));
+            return map(groupRepository.saveAndFlush(g));
+        });
     }
 
     @Transactional(readOnly = true)
@@ -55,78 +58,88 @@ public class GroupService {
     }
 
     public GroupResponse update(UUID id, long expectedVersion, UpdateGroupRequest req) {
-        Group g = findEntityForMutation(id, expectedVersion);
+        return transactionExecutor.execute("group.update", () -> {
+            Group g = findEntityForMutation(id, expectedVersion);
 
-        if (req.name() != null) {
-            g.setName(req.name());
-        }
-
-        if (req.code() != null && !req.code().equalsIgnoreCase(g.getCode())) {
-            if (groupRepository.existsByCodeIgnoreCase(req.code())) {
-                throw new IllegalArgumentException(
-                        "Group with code '%s' already exists".formatted(req.code())
-                );
+            if (req.name() != null) {
+                g.setName(req.name());
             }
-            g.setCode(req.code());
-        }
 
-        if (req.size() != null) {
-            g.setSize(req.size());
-        }
+            if (req.code() != null && !req.code().equalsIgnoreCase(g.getCode())) {
+                if (groupRepository.existsByCodeIgnoreCase(req.code())) {
+                    throw new IllegalArgumentException(
+                            "Group with code '%s' already exists".formatted(req.code())
+                    );
+                }
+                g.setCode(req.code());
+            }
 
-        Group saved = groupRepository.saveAndFlush(g);
-        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
-        return map(saved);
+            if (req.size() != null) {
+                g.setSize(req.size());
+            }
+
+            Group saved = groupRepository.saveAndFlush(g);
+            scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+            return map(saved);
+        });
     }
 
     public GroupResponse archive(UUID id, long expectedVersion) {
-        Group g = findEntityForMutation(id, expectedVersion);
-        g.setStatus(Status.INACTIVE);
-        Group saved = groupRepository.saveAndFlush(g);
-        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
-        return map(saved);
+        return transactionExecutor.execute("group.archive", () -> {
+            Group g = findEntityForMutation(id, expectedVersion);
+            g.setStatus(Status.INACTIVE);
+            Group saved = groupRepository.saveAndFlush(g);
+            scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+            return map(saved);
+        });
     }
 
     public GroupResponse activate(UUID id, long expectedVersion) {
-        Group g = findEntityForMutation(id, expectedVersion);
-        g.setStatus(Status.ACTIVE);
-        Group saved = groupRepository.saveAndFlush(g);
-        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
-        return map(saved);
+        return transactionExecutor.execute("group.activate", () -> {
+            Group g = findEntityForMutation(id, expectedVersion);
+            g.setStatus(Status.ACTIVE);
+            Group saved = groupRepository.saveAndFlush(g);
+            scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+            return map(saved);
+        });
     }
 
     public GroupResponse addStudent(UUID groupId, long expectedVersion, String studentId) {
-        Group group = findEntityForMutation(groupId, expectedVersion);
+        return transactionExecutor.execute("group.addStudent", () -> {
+            Group group = findEntityForMutation(groupId, expectedVersion);
 
-        if (studentId == null || studentId.isBlank()) {
-            throw new IllegalArgumentException("studentId must not be blank");
-        }
-        String normalized = studentId.trim();
+            if (studentId == null || studentId.isBlank()) {
+                throw new IllegalArgumentException("studentId must not be blank");
+            }
+            String normalized = studentId.trim();
 
-        if (!studentRepository.existsByStudentId(normalized)) {
-            throw new IllegalArgumentException("Student not found: " + normalized);
-        }
+            if (!studentRepository.existsByStudentId(normalized)) {
+                throw new IllegalArgumentException("Student not found: " + normalized);
+            }
 
-        if (!group.getStudentIds().contains(normalized)) {
-            group.getStudentIds().add(normalized);
-        }
+            if (!group.getStudentIds().contains(normalized)) {
+                group.getStudentIds().add(normalized);
+            }
 
-        Group saved = groupRepository.saveAndFlush(group);
-        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
-        return map(saved);
+            Group saved = groupRepository.saveAndFlush(group);
+            scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+            return map(saved);
+        });
     }
 
     public GroupResponse removeStudent(UUID groupId, long expectedVersion, String studentId) {
-        Group group = findEntityForMutation(groupId, expectedVersion);
+        return transactionExecutor.execute("group.removeStudent", () -> {
+            Group group = findEntityForMutation(groupId, expectedVersion);
 
-        if (studentId != null && !studentId.isBlank()) {
-            String normalized = studentId.trim();
-            group.getStudentIds().remove(normalized);
-        }
+            if (studentId != null && !studentId.isBlank()) {
+                String normalized = studentId.trim();
+                group.getStudentIds().remove(normalized);
+            }
 
-        Group saved = groupRepository.saveAndFlush(group);
-        scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
-        return map(saved);
+            Group saved = groupRepository.saveAndFlush(group);
+            scheduleRegenerationService.regenerateAfterGroupChanged(saved.getCode());
+            return map(saved);
+        });
     }
 
     private Group findEntityForMutation(UUID id, long expectedVersion) {

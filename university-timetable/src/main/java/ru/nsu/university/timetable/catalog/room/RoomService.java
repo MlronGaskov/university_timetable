@@ -10,6 +10,7 @@ import ru.nsu.university.timetable.catalog.room.dto.RoomResponse;
 import ru.nsu.university.timetable.catalog.room.dto.UpdateRoomRequest;
 import ru.nsu.university.timetable.web.OptimisticLockingGuard;
 import ru.nsu.university.timetable.schedule.timetable.regeneration.ScheduleRegenerationService;
+import ru.nsu.university.timetable.web.RetriableTransactionExecutor;
 
 import java.util.Comparator;
 import java.util.List;
@@ -17,36 +18,38 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class RoomService {
     private final RoomRepository roomRepository;
     private final ScheduleRegenerationService scheduleRegenerationService;
+    private final RetriableTransactionExecutor transactionExecutor;
 
     public RoomResponse create(CreateRoomRequest req) {
-        if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
-            throw new IllegalArgumentException(
-                    "Room with code '%s' already exists".formatted(req.roomCode())
-            );
-        }
+        return transactionExecutor.execute("room.create", () -> {
+            if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
+                throw new IllegalArgumentException(
+                        "Room with code '%s' already exists".formatted(req.roomCode())
+                );
+            }
 
-        if (roomRepository.existsByBuildingIgnoreCaseAndNumberIgnoreCase(req.building(), req.number())) {
-            throw new IllegalArgumentException(
-                    "Room already exists in building '%s' with number '%s'"
-                            .formatted(req.building(), req.number())
-            );
-        }
+            if (roomRepository.existsByBuildingIgnoreCaseAndNumberIgnoreCase(req.building(), req.number())) {
+                throw new IllegalArgumentException(
+                        "Room already exists in building '%s' with number '%s'"
+                                .formatted(req.building(), req.number())
+                );
+            }
 
-        Room room = Room.builder()
-                .roomCode(req.roomCode().trim())
-                .building(req.building())
-                .number(req.number())
-                .capacity(req.capacity())
-                .status(Status.ACTIVE)
-                .build();
+            Room room = Room.builder()
+                    .roomCode(req.roomCode().trim())
+                    .building(req.building())
+                    .number(req.number())
+                    .capacity(req.capacity())
+                    .status(Status.ACTIVE)
+                    .build();
 
-        applyItems(room, req.items());
+            applyItems(room, req.items());
 
-        return map(roomRepository.saveAndFlush(room));
+            return map(roomRepository.saveAndFlush(room));
+        });
     }
 
     @Transactional(readOnly = true)
@@ -64,53 +67,59 @@ public class RoomService {
     }
 
     public RoomResponse update(UUID id, long expectedVersion, UpdateRoomRequest req) {
-        Room room = findEntityForMutation(id, expectedVersion);
+        return transactionExecutor.execute("room.update", () -> {
+            Room room = findEntityForMutation(id, expectedVersion);
 
-        if (req.roomCode() != null && !req.roomCode().equalsIgnoreCase(room.getRoomCode())) {
-            if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
-                throw new IllegalArgumentException(
-                        "Room with code '%s' already exists".formatted(req.roomCode())
-                );
+            if (req.roomCode() != null && !req.roomCode().equalsIgnoreCase(room.getRoomCode())) {
+                if (roomRepository.existsByRoomCodeIgnoreCase(req.roomCode())) {
+                    throw new IllegalArgumentException(
+                            "Room with code '%s' already exists".formatted(req.roomCode())
+                    );
+                }
+                room.setRoomCode(req.roomCode().trim());
             }
-            room.setRoomCode(req.roomCode().trim());
-        }
 
-        if (req.building() != null) {
-            room.setBuilding(req.building());
-        }
+            if (req.building() != null) {
+                room.setBuilding(req.building());
+            }
 
-        if (req.number() != null) {
-            room.setNumber(req.number());
-        }
+            if (req.number() != null) {
+                room.setNumber(req.number());
+            }
 
-        if (req.capacity() != null) {
-            room.setCapacity(req.capacity());
-        }
+            if (req.capacity() != null) {
+                room.setCapacity(req.capacity());
+            }
 
-        if (req.items() != null) {
-            room.getItems().clear();
-            applyItems(room, req.items());
-        }
+            if (req.items() != null) {
+                room.getItems().clear();
+                applyItems(room, req.items());
+            }
 
-        Room saved = roomRepository.saveAndFlush(room);
-        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
-        return map(saved);
+            Room saved = roomRepository.saveAndFlush(room);
+            scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+            return map(saved);
+        });
     }
 
     public RoomResponse archive(UUID id, long expectedVersion) {
-        Room room = findEntityForMutation(id, expectedVersion);
-        room.setStatus(Status.INACTIVE);
-        Room saved = roomRepository.saveAndFlush(room);
-        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
-        return map(saved);
+        return transactionExecutor.execute("room.archive", () -> {
+            Room room = findEntityForMutation(id, expectedVersion);
+            room.setStatus(Status.INACTIVE);
+            Room saved = roomRepository.saveAndFlush(room);
+            scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+            return map(saved);
+        });
     }
 
     public RoomResponse activate(UUID id, long expectedVersion) {
-        Room room = findEntityForMutation(id, expectedVersion);
-        room.setStatus(Status.ACTIVE);
-        Room saved = roomRepository.saveAndFlush(room);
-        scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
-        return map(saved);
+        return transactionExecutor.execute("room.activate", () -> {
+            Room room = findEntityForMutation(id, expectedVersion);
+            room.setStatus(Status.ACTIVE);
+            Room saved = roomRepository.saveAndFlush(room);
+            scheduleRegenerationService.regenerateAfterRoomChanged(saved.getRoomCode());
+            return map(saved);
+        });
     }
 
     private Room findEntityForMutation(UUID id, long expectedVersion) {

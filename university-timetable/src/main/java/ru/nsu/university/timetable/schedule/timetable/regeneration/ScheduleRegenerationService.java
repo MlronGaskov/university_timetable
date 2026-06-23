@@ -3,10 +3,9 @@ package ru.nsu.university.timetable.schedule.timetable.regeneration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import ru.nsu.university.timetable.schedule.semester.Semester;
 import ru.nsu.university.timetable.schedule.semester.SemesterRepository;
 import ru.nsu.university.timetable.schedule.timetable.*;
@@ -25,8 +24,6 @@ import java.util.Set;
 @Slf4j
 @RequiredArgsConstructor
 public class ScheduleRegenerationService {
-    private static final int MAX_RETRIES = 2;
-
     private final SemesterRepository semesterRepository;
     private final ScheduleRepository scheduleRepository;
     private final ScheduleGenerationLockRepository lockRepository;
@@ -35,50 +32,43 @@ public class ScheduleRegenerationService {
     private final ScheduleSolverResponseMapper responseMapper;
     private final ScheduleChangeNotificationService notificationService;
     private final PrologSolverClient solverClient;
-    private final PlatformTransactionManager transactionManager;
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterCourseChanged(String courseCode) {
         regenerateAffectedSchedules(ScheduleChangeEvent.courseChanged(courseCode));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterTeacherWorkingHoursChanged(String teacherId) {
         regenerateAffectedSchedules(ScheduleChangeEvent.teacherWorkingHoursChanged(teacherId));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterRoomChanged(String roomCode) {
         regenerateAffectedSchedules(ScheduleChangeEvent.roomChanged(roomCode));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterSemesterChanged(String semesterCode) {
         regenerateAffectedSchedules(ScheduleChangeEvent.semesterChanged(semesterCode));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterPolicyChanged(String policyName) {
         regenerateAffectedSchedules(ScheduleChangeEvent.policyChanged(policyName));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAfterGroupChanged(String groupCode) {
         regenerateAffectedSchedules(ScheduleChangeEvent.groupChanged(groupCode));
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
     public void regenerateAffectedSchedules(ScheduleChangeEvent event) {
+        // Regeneration must commit atomically with the source catalog mutation.
         for (String semesterCode : affectedSemesterCodes(event)) {
-            regenerateSemesterWithRetry(semesterCode, event);
+            regenerateSemesterOnce(semesterCode, event);
         }
-    }
-
-    private void regenerateSemesterWithRetry(String semesterCode, ScheduleChangeEvent event) {
-        RuntimeException lastFailure = null;
-        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                new TransactionTemplate(transactionManager).executeWithoutResult(status -> regenerateSemesterOnce(semesterCode, event));
-                return;
-            } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException ex) {
-                lastFailure = ex;
-                log.warn("Schedule regeneration conflict for semesterCode={}, attempt={}", semesterCode, attempt, ex);
-            }
-        }
-        throw lastFailure;
     }
 
     private void regenerateSemesterOnce(String semesterCode, ScheduleChangeEvent event) {
@@ -142,7 +132,11 @@ public class ScheduleRegenerationService {
 
     private void acquireSemesterLock(String semesterCode) {
         if (!lockRepository.existsById(semesterCode)) {
-            lockRepository.saveAndFlush(new ScheduleGenerationLock(semesterCode));
+            try {
+                lockRepository.saveAndFlush(new ScheduleGenerationLock(semesterCode));
+            } catch (DataIntegrityViolationException ignored) {
+                log.debug("Schedule generation lock already exists for semesterCode={}", semesterCode);
+            }
         }
 
         lockRepository.findForUpdate(semesterCode)
