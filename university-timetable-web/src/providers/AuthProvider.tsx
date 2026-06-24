@@ -19,6 +19,7 @@ export interface AuthContextValue {
     token: string | null;
     role: Role | null;
     userId: string | null;
+    username: string | null;
     teacherId: string | null;
     studentId: string | null;
     isAuthenticated: boolean;
@@ -92,6 +93,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({children}) => {
             token,
             role,
             userId: (payload?.userId as string | undefined) ?? null,
+            username: (payload?.sub as string | undefined) ?? null,
             teacherId: (payload?.teacherId as string | undefined) ?? null,
             studentId: (payload?.studentId as string | undefined) ?? null,
             isAuthenticated: Boolean(token),

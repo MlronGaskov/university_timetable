@@ -79,7 +79,7 @@ export const LoginPage: React.FC = () => {
                         </button>
                     </div>
                 </FormField>
-                {error && <div style={{color: '#f97373', marginBottom: 8}}>{error}</div>}
+                {error && <div style={{color: 'var(--color-danger)', marginBottom: 8}}>{error}</div>}
                 <Button type="submit" disabled={loading}>
                     {loading ? 'Входим…' : 'Войти'}
                 </Button>

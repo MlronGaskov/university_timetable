@@ -4,7 +4,7 @@ import {useRoleGuard} from '@/hooks/useRoleGuard';
 import styles from './TopBar.module.css';
 
 export const TopBar: React.FC = () => {
-    const {logout} = useAuth();
+    const {logout, username} = useAuth();
     const {role} = useRoleGuard();
 
     return (
@@ -14,6 +14,7 @@ export const TopBar: React.FC = () => {
                 {role && <span className={styles.roleBadge}>{role}</span>}
             </div>
             <div className={styles.right}>
+                {username && <span className={styles.username}>{username}</span>}
                 <button className={styles.logoutBtn} onClick={logout}>
                     Выйти
                 </button>

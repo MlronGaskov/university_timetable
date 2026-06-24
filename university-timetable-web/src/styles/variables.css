@@ -7,6 +7,8 @@
     --color-primary: #2563eb;
     --color-primary-soft: rgba(37, 99, 235, 0.08);
     --color-danger: #dc2626;
+    --color-success: #16a34a;
+    --color-warning: #d97706;
     --color-text: #111827;
     --color-text-muted: #6b7280;
     --radius-sm: 4px;

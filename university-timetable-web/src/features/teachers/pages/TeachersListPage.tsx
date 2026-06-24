@@ -17,6 +17,8 @@ import {ActionsCell} from '@/components/ui/ActionsCell';
 import {CsvMessages} from '@/components/ui/CsvMessages';
 import {CsvToolbar} from '@/components/ui/CsvToolbar';
 import {downloadCsv} from '@/utils/csv';
+import {StatusBadge} from '@/components/ui/StatusBadge';
+import {useToast} from '@/providers/ToastProvider';
 import crudStyles from '@/components/ui/CrudFormLayout.module.css';
 import styles from './TeachersListPage.module.css';
 
@@ -85,6 +87,7 @@ const getDefaultWorkingHours = (): WorkingIntervalDto[] => [
 
 export const TeachersListPage: React.FC = () => {
     const {isAdmin} = useRoleGuard();
+    const {showToast} = useToast();
 
     const [items, setItems] = useState<TeacherResponse[]>([]);
     const [loading, setLoading] = useState(false);
@@ -176,6 +179,7 @@ export const TeachersListPage: React.FC = () => {
 
             setItems(prev => prev.map(t => (t.id === updated.id ? updated : t)));
             setHoursTeacherId(null);
+            showToast('Рабочие часы сохранены', 'success');
         } catch (err: any) {
             console.error(err);
 
@@ -564,7 +568,7 @@ export const TeachersListPage: React.FC = () => {
                         <tr key={t.id}>
                             <td>{t.teacherId}</td>
                             <td>{t.fullName}</td>
-                            <td>{t.status}</td>
+                            <td><StatusBadge status={t.status}/></td>
                             <td>{t.preferredWorkingHours && t.preferredWorkingHours.length > 0 ? 'Заданы' : '—'}</td>
 
                             {isAdmin && (

@@ -60,6 +60,19 @@ interface EnrichedUnplaced extends UnplacedCourseDto {
 
 const norm = (v: string) => v.trim().toLowerCase();
 
+const SLOT_PALETTE = [
+    '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6',
+    '#06b6d4', '#f97316', '#84cc16', '#ec4899',
+];
+
+function courseColor(courseCode: string): string {
+    let hash = 0;
+    for (let i = 0; i < courseCode.length; i++) {
+        hash = (hash * 31 + courseCode.charCodeAt(i)) & 0xffff;
+    }
+    return SLOT_PALETTE[hash % SLOT_PALETTE.length];
+}
+
 export const ScheduleDetailsPage: React.FC = () => {
     const {scheduleId} = useParams<'scheduleId'>();
 
@@ -438,7 +451,11 @@ export const ScheduleDetailsPage: React.FC = () => {
 
                                     <div className={styles.slotList}>
                                         {daySlots.map(s => (
-                                            <div key={s.id} className={styles.slotRow}>
+                                            <div
+                                                key={s.id}
+                                                className={styles.slotRow}
+                                                style={{borderLeftColor: courseColor(s.course?.code ?? s.id)}}
+                                            >
                                                 <div className={styles.slotTime}>
                                                     {s.startTime}–{s.endTime}
                                                 </div>

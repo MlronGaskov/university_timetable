@@ -11,12 +11,15 @@ import type {SemesterResponse} from '@/types/semesters';
 
 import {formatDate, formatInstant} from '@/utils/formatters';
 import {useRoleGuard} from '@/hooks/useRoleGuard';
+import {useToast} from '@/providers/ToastProvider';
+import {EmptyState} from '@/components/ui/EmptyState';
 
 import styles from './SemesterSchedulesPage.module.css';
 
 export const SemesterSchedulesPage: React.FC = () => {
     const {semesterCode} = useParams<{ semesterCode: string }>();
     const {isAdmin} = useRoleGuard();
+    const {showToast} = useToast();
 
     const [semester, setSemester] = useState<SemesterResponse | null>(null);
     const [schedules, setSchedules] = useState<ScheduleSummaryResponse[]>([]);
@@ -89,9 +92,14 @@ export const SemesterSchedulesPage: React.FC = () => {
                 const filtered = prev.filter(s => s.id !== summary.id);
                 return [summary, ...filtered];
             });
+            const msg = generated.unplaced?.length
+                ? `Расписание сгенерировано. Не размещено пар: ${generated.unplaced.length}`
+                : 'Расписание успешно сгенерировано';
+            showToast(msg, generated.unplaced?.length ? 'info' : 'success');
         } catch (e) {
             console.error(e);
             setError('Ошибка генерации расписания');
+            showToast('Ошибка генерации расписания', 'error');
         } finally {
             setGenerating(false);
         }
@@ -161,7 +169,11 @@ export const SemesterSchedulesPage: React.FC = () => {
             )}
 
             {isEmpty && (
-                <p>Для этого семестра ещё нет сгенерированных расписаний.</p>
+                <EmptyState
+                    icon="🗓️"
+                    title="Расписания ещё нет"
+                    description="Нажмите «Сгенерировать расписание», чтобы создать первое расписание для этого семестра."
+                />
             )}
 
             {!loading && schedules.length > 0 && (
