@@ -27,6 +27,7 @@ export const SidebarNav: React.FC = () => {
                         <div className={styles.sectionTitle}>Администрирование</div>
                         <NavLink to="/admin/users" className={link}>Пользователи</NavLink>
                         <NavLink to="/policies" className={link}>Политики</NavLink>
+                        <NavLink to="/notifications" className={link}>Уведомления</NavLink>
                     </>
                 )}
             </nav>

@@ -16,6 +16,7 @@ import {UsersListPage} from '@/features/users/pages/UsersListPage';
 import {PoliciesListPage} from '@/features/policies/pages/PoliciesListPage';
 import {SemesterSchedulesPage} from '@/features/schedules/pages/SemesterSchedulesPage';
 import {ScheduleDetailsPage} from '@/features/schedules/pages/ScheduleDetailsPage';
+import {NotificationsPage} from '@/features/notifications/pages/NotificationsPage';
 
 const HomeRedirect: React.FC = () => {
     return <Navigate to="/profile" replace/>;
@@ -46,6 +47,7 @@ export const AppRouter: React.FC = () => {
 
                     <Route element={<RoleRoute allowed={['ADMIN']}/>}>
                         <Route path="/admin/users" element={<UsersListPage/>}/>
+                        <Route path="/notifications" element={<NotificationsPage/>}/>
                     </Route>
                 </Route>
             </Route>
